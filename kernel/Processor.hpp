@@ -32,8 +32,8 @@ Software without prior written authorization from Florian GERARD
 
 #include "../processor/ST/l4/stm32l432xx.h"
 
-#define VECTOR_TABLE_SIZE (98)
-#define VECTOR_TABLE_ALIGNEMENT (128)
+#define VECTOR_TABLE_SIZE (99)
+#define VECTOR_TABLE_ALIGNEMENT (512)
 
 #endif 
 
@@ -41,7 +41,7 @@ Software without prior written authorization from Florian GERARD
 #include "../processor/st/F4/stm32f411xe.h"
 
 #define VECTOR_TABLE_SIZE (98)
-#define VECTOR_TABLE_ALIGNEMENT (128)
+#define VECTOR_TABLE_ALIGNEMENT (512)
 
 #endif
 
@@ -49,7 +49,7 @@ Software without prior written authorization from Florian GERARD
 #include <yggdrasil/processor/st/l4/stm32l496xx.h>
 
 #define VECTOR_TABLE_SIZE (106)
-#define VECTOR_TABLE_ALIGNEMENT (128)
+#define VECTOR_TABLE_ALIGNEMENT (512)
 
 #endif
 
@@ -58,27 +58,35 @@ Software without prior written authorization from Florian GERARD
 
 //82 Interrupts + 15
 #define VECTOR_TABLE_SIZE (97)
-#define VECTOR_TABLE_ALIGNEMENT (128)
+#define VECTOR_TABLE_ALIGNEMENT (512)
 
 #endif
 
 #ifdef STM32L476xx
 #include "../processor/st/l4/stm32l476xx.h"
-#define VECTOR_TABLE_SIZE (97)
-#define VECTOR_TABLE_ALIGNEMENT (128)
+#define VECTOR_TABLE_SIZE (98)
+#define VECTOR_TABLE_ALIGNEMENT (512)
 
 #endif
 
 #ifdef STM32L475xx
 #include "../processor/st/l4/stm32l475xx.h"
 
-#define VECTOR_TABLE_SIZE (97)
-#define VECTOR_TABLE_ALIGNEMENT (128)
+#define VECTOR_TABLE_SIZE (98)
+#define VECTOR_TABLE_ALIGNEMENT (512)
 #endif
 
 #ifdef STM32F303xE
 #include "../processor/st/f3/stm32f303xe.h"
 
-#define VECTOR_TABLE_SIZE (100)
-#define VECTOR_TABLE_ALIGNEMENT (128)
+#define VECTOR_TABLE_SIZE (101)
+#define VECTOR_TABLE_ALIGNEMENT (512)
+#endif
+
+#ifdef STM32F100xB
+#include "../processor/st/f1/stm32f100xb.h"
+
+#define VECTOR_TABLE_SIZE (72)
+#define VECTOR_TABLE_ALIGNEMENT (512)
+
 #endif
