@@ -73,7 +73,7 @@
 /** @addtogroup STM32F1xx_System_Private_Includes
   * @{
   */
-
+#ifdef STM32F1
 #include "stm32f1xx.h"
 
 /**
@@ -433,6 +433,7 @@ void SystemInit_ExtMemCtl(void)
 }
 #endif /* DATA_IN_ExtSRAM */
 #endif /* STM32F100xE || STM32F101xE || STM32F101xG || STM32F103xE || STM32F103xG */
+#endif //STM32F1
 
 /**
   * @}
