@@ -34,10 +34,9 @@ namespace kernel
 
 		bool Task::start()
 		{
-			if(Scheduler::s_schedulerStarted)
-				return startTaskStub(this);
-			else
-				return Scheduler::preSchedulerStartTask(*this);
+			if (Scheduler::s_interruptInstalled == false)
+				Scheduler::installSystemInterrupts();
+			return startTaskStub(this);
 		}
 
 		bool Task::stop()

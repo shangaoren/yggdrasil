@@ -52,7 +52,7 @@
 /** @addtogroup stm32f1xx
   * @{
   */
-    
+#ifdef STM32F1
 #ifndef __STM32F1XX_H
 #define __STM32F1XX_H
 
@@ -224,6 +224,7 @@ typedef enum
 #endif /* __cplusplus */
 
 #endif /* __STM32F1xx_H */
+#endif //STM32F1
 /**
   * @}
   */

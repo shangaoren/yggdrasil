@@ -65,15 +65,23 @@ namespace kernel
 			if(!s_systemInterface->initSystemClock())
 				return false;
 
+			installSystemInterrupts();
+			systickInit();
+
+			svc(ServiceCall::SvcNumber::startFirstTask);
+			__BKPT(0);
+			return true;
+		}
+		
+		static void installSystemInterrupts()
+		{
 			//set vectorTable
-	#ifdef SYSVIEW
+			#ifdef SYSVIEW
 			sysviewInitInterruptStub();
 			SCB->VTOR = s_sysviewVectorTable.tableBaseAddress();
-	#else
+			#else
 			SCB->VTOR = s_vectorTable.tableBaseAddress();
-	#endif
-
-
+			#endif
 
 			//configure severe interrupts
 			s_vectorTable.registerHandler(HardFault_IRQn, hardFault);
@@ -82,28 +90,22 @@ namespace kernel
 			s_vectorTable.registerHandler(BusFault_IRQn, busFault);
 
 			/*Configure System Interrupts*/
-			IntVectManager::subPriorityBits(numberOfSubBits);
+			s_vectorTable.subPriorityBits(s_subPriorityBits);
 
 
 			//configure service call
 			s_vectorTable.registerHandler(SVCall_IRQn, svcBootstrap);
-			IntVectManager::irqPriority(SVCall_IRQn,(systemInterruptPriority+1));
+			s_vectorTable.irqPriority(SVCall_IRQn, (s_systemPriority + 1));
 
 
 			//configure pendSv
 			s_vectorTable.registerHandler(PendSV_IRQn, pendSvHandler);
-			IntVectManager::irqPriority(PendSV_IRQn,0xFF);
+			s_vectorTable.irqPriority(PendSV_IRQn, 0xFF);
 
 
 			//configure systick
 			s_vectorTable.registerHandler(SysTick_IRQn, systickHandler);
-			IntVectManager::irqPriority(SysTick_IRQn,systemInterruptPriority);
-
-			systickInit();
-
-			svc(ServiceCall::SvcNumber::startFirstTask);
-			__BKPT(0);
-			return true;
+			s_vectorTable.irqPriority(SysTick_IRQn, s_systemPriority);
 		}
 
 		static bool __attribute__((aligned(4))) startFirstTask()
@@ -124,32 +126,6 @@ namespace kernel
 			return true; //should never return here
 	}
 		
-		
-		
-		//Register an Irq before Kernel has started
-		static bool preSchedulerIrqRegister(IRQn_Type irq,IntVectManager::IrqHandler handler)
-		{
-			if (s_schedulerStarted)
-				return false;
-			else
-			{
-				s_vectorTable.registerHandler(irq, handler);
-				return true;
-			}
-		}
-		
-		//Unregister Irq before Kernel has Started
-		static bool preSchedulerIrqUnregister(IRQn_Type irq)
-		{
-			if (s_schedulerStarted)
-				return false;
-			else
-			{
-				s_vectorTable.unregisterHandler(irq);
-				return true;
-			}
-		}
-		
 		/*****************************************************DATA*****************************************************/
 		
 #ifdef SYSVIEW
@@ -157,6 +133,9 @@ namespace kernel
 #endif
 		static IntVectManager s_vectorTable;
 		static interface::ISystem* s_systemInterface;
+		static bool s_interruptInstalled;
+		static uint8_t s_systemPriority;
+		static uint8_t s_subPriorityBits;
 		
 		static ReadyList s_ready;
 		static SleepingList s_sleeping;
@@ -169,7 +148,7 @@ namespace kernel
 		static Task* s_activeTask;
 		static uint32_t s_sysTickFreq;
 		
-		static TaskWithStack<128> s_idle;
+		static TaskWithStack<30> s_idle;
 		
 		
 		
@@ -213,24 +192,9 @@ namespace kernel
 			return true;
 		}
 		
-		
-		static bool preSchedulerStartTask(Task& task)
-		{
-			if (task.m_started)
-				return false;
-#ifdef SYSVIEW
-			SEGGER_SYSVIEW_OnTaskCreate(reinterpret_cast<uint32_t>(&task));
-			SEGGER_SYSVIEW_SendTaskInfo(&task.m_info);
-			SEGGER_SYSVIEW_OnTaskStartReady(reinterpret_cast<uint32_t>(&task));
-#endif
-			s_started.insert(&task, Task::priorityCompare);
-			s_ready.insert(&task, Task::priorityCompare);
-			task.m_started = true;
-			task.m_state = Task::state::ready;
-			return true;
-		}
-
-
+		/**
+		 * Look at ready task to see if a context switching is needed
+		 ***/
 		static bool schedule()
 		{
 			if (s_ready.peekFirst()->m_taskPriority > s_activeTask->m_taskPriority) //a task with higher priority is waiting, trigger context switching
@@ -411,19 +375,19 @@ namespace kernel
 				"MRSNE R0, PSP\n\t" 
 				"MOV %0,R0\n\t" : "=r" (stackedPointer) :);
 			asm volatile("PUSH {LR}\n\t");    //stack LR to be able to return for exception
-			SvcHandler(stackedPointer);
+			svcHandler(stackedPointer);
 			asm volatile("POP {PC}");   	//return from exception
 		}
 		
 		
 		
 		//Svc handler, redirect svc call to the right function
-		static void __attribute__((aligned(4))) SvcHandler(uint32_t* args)
+		static void __attribute__((aligned(4))) svcHandler(uint32_t* args)
 		{
 			ServiceCall::SvcNumber askedService;
 			uint32_t param0 = args[0], param1 = args[1], param2 = args[2];
 			
-			askedService = (reinterpret_cast<ServiceCall::SvcNumber*>(args[6]))[-2];
+			askedService = (reinterpret_cast<ServiceCall::SvcNumber*>(args[6]))[-2]; //get stacked PC, then -2 to get SVC instruction 
 			
 			switch (askedService)
 			{
@@ -472,11 +436,11 @@ namespace kernel
 				break;
 
 			case kernel::ServiceCall::SvcNumber::setGlobalPriority:
-				IntVectManager::irqPriority(static_cast<IRQn_Type>(param0),static_cast<uint8_t>(param1));
+				s_vectorTable.irqPriority(static_cast<IRQn_Type>(param0),static_cast<uint8_t>(param1));
 				break;
 
 			case kernel::ServiceCall::SvcNumber::setPriority:
-				IntVectManager::irqPriority(static_cast<IRQn_Type>(param0), static_cast<uint8_t>(param1), static_cast<uint8_t>(param2));
+				s_vectorTable.irqPriority(static_cast<IRQn_Type>(param0), static_cast<uint8_t>(param1), static_cast<uint8_t>(param2));
 				break;
 
 			default:	//unknown Service call number

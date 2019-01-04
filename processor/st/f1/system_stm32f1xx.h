@@ -46,6 +46,7 @@
 /**
   * @brief Define to prevent recursive inclusion
   */
+#include <stdint.h>
 #ifndef __SYSTEM_STM32F10X_H
 #define __SYSTEM_STM32F10X_H
 

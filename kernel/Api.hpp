@@ -43,20 +43,25 @@ namespace kernel
 	class Api
 	{
 	public:
+		
+		/*Start Kernel*/
 		static inline bool startKernel(interface::ISystem& systemClock, uint8_t systemInterruptPriority, uint8_t numberOfSubPriorityBits)
 		{
 			return Scheduler::startKernel(systemClock,systemInterruptPriority,numberOfSubPriorityBits);
 		}
 		
 		
-		/*wait without using kernel*/
+		/*wait without using kernel
+		 *@Warning : will wait until time counter elapsed*/
 		static void wait(uint32_t ms)
 		{
 			uint64_t endWaitTimeStamp = Scheduler::s_ticks + ms;
 			while (Scheduler::s_ticks <= endWaitTimeStamp) ;
 		}
 		
-		static void __attribute__((aligned(4))) sleep(uint32_t ms)
+		/*set a Task into sleep for an amount of ms
+		 *@Warning: do not call it if you're not in a Task*/
+		static void sleep(uint32_t ms)
 		{
 			asm volatile(
 				"MOV R0,%0\n\t"
@@ -73,76 +78,65 @@ namespace kernel
 		/*register an irq before the scheduler has started*/
 		static void registerIrq(IRQn_Type irq, IntVectManager::IrqHandler handler)
 		{
-			if (Scheduler::s_schedulerStarted)
-				registerIrqKernel(irq, handler);
-			else
-				Scheduler::preSchedulerIrqRegister(irq, handler);
+			if (Scheduler::s_interruptInstalled == false)
+				Scheduler::installSystemInterrupts();
+			registerIrqKernel(irq, handler);
+				
 		}
 		
 		
 		/*unregister an irq before the scheduler has started*/
 		static void unregisterIrq(IRQn_Type irq)
 		{
-			if (Scheduler::s_schedulerStarted)
-				unRegisterIrqKernel(irq);
-			else
-				Scheduler::preSchedulerIrqUnregister(irq);
+			if (Scheduler::s_interruptInstalled == false)
+				Scheduler::installSystemInterrupts();
+			unRegisterIrqKernel(irq);
 		}
 		
 
 		/*Setup an Irq Priority*/
 		static inline void irqPriority(IRQn_Type irq, uint8_t preEmpt, uint8_t sub)
 		{
-			if(Scheduler::s_schedulerStarted)
-				irqPriorityKernel(irq,preEmpt,sub);
-			else
-				IntVectManager::irqPriority(irq,preEmpt,sub);
+			if (Scheduler::s_interruptInstalled == false)
+				Scheduler::installSystemInterrupts();
+			irqPriorityKernel(irq,preEmpt,sub);
 		}
 
 		static inline void irqPriority(IRQn_Type irq, uint8_t priority)
 		{
-			if(Scheduler::s_schedulerStarted)
-				irqGlobalPriorityKernel(irq,priority);
-			else
-				IntVectManager::irqPriority(irq,priority);
+			if (Scheduler::s_interruptInstalled == false)
+				Scheduler::installSystemInterrupts();
+			irqGlobalPriorityKernel(irq,priority);
 		}
 
 		/*Enable an Irq in NVIC*/
 		static inline void enableIrq(IRQn_Type irq)
 		{
-			if(Scheduler::s_schedulerStarted)
-			{
-				asm volatile(
+			if (Scheduler::s_interruptInstalled == false)
+				Scheduler::installSystemInterrupts();
+			asm volatile(
 					"MOV R0,%0\n\t"
 					"SVC %[immediate]"::"r" (irq), [immediate] "I"(ServiceCall::SvcNumber::enableIrq));
-			}
-			else
-				IntVectManager::enableIrq(irq);
 		}
 
 		/*Disable an Irq in NVIC*/
 		static inline void disableIrq(IRQn_Type irq)
 		{
-			if(Scheduler::s_schedulerStarted)
-			{
-				asm volatile(
+			if (Scheduler::s_interruptInstalled == false)
+				Scheduler::installSystemInterrupts();
+			asm volatile(
 					"MOV R0,%0\n\t"
 					"SVC %[immediate]"::"r" (irq), [immediate] "I"(ServiceCall::SvcNumber::disableIrq));
-			}
-			else
-				IntVectManager::disableIrq(irq);
 		}
 
+		/*Clear a pending Irq*/
 		static inline void clearIrq(IRQn_Type irq)
 		{
-			if(Scheduler::s_schedulerStarted)
-			{
-				asm volatile(
+			if (Scheduler::s_interruptInstalled)
+				Scheduler::installSystemInterrupts();
+			asm volatile(
 					"MOV R0,%0\n\t"
 					"SVC %[immediate]"::"r" (irq), [immediate] "I"(ServiceCall::SvcNumber::clearIrq));
-			}
-			else
-				IntVectManager::clearIrq(irq);
 		}
 
 	private:

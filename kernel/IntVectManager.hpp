@@ -55,29 +55,63 @@ namespace kernel
 		static constexpr uint16_t kNumberOfEnabledPriorityBits = __NVIC_PRIO_BITS;
 		static constexpr uint16_t kPiorityOffsetBits = (kNumberMaxOfInterruptBits - kNumberOfEnabledPriorityBits);
 		static constexpr uint16_t kVectorKey = 0x05FAU;
-		static uint8_t s_numberOfPreEmptBits;
-		static uint8_t s_numberOfSubBits;
-
-		IntVectManager();
-		~IntVectManager();
-		static void defaultIsrHandler();
-		void registerHandler(IRQn_Type irq, IrqHandler handler);
-		void registerHandler(uint16_t irq, IrqHandler handler);
-		void unregisterHandler(IRQn_Type irq);
-		uint32_t tableBaseAddress();
-		IrqHandler getIsr(uint32_t isrNumber);
 		
-		IrqHandler m_vectorTable[kVectorTableSize] __attribute__((aligned(kVectorTableAlignement))); //must be aligned with next power of 2 of table size
+		uint8_t m_numberOfSubBits;
+		uint8_t m_numberOfPreEmptBits;
+		bool m_tableInstalled;
+		IrqHandler m_vectorTable[kVectorTableSize] __attribute__((aligned(kVectorTableAlignement)));  //must be aligned with next power of 2 of table size
 
+
+		IntVectManager(uint8_t numberOfSubBits = 2)
+			: m_numberOfSubBits(numberOfSubBits), m_numberOfPreEmptBits(kNumberOfEnabledPriorityBits - m_numberOfSubBits) , m_tableInstalled(false)
+		{
+			for (int i = 0; i < VECTOR_TABLE_SIZE; i++)
+			{
+				m_vectorTable[i] = reinterpret_cast<IrqHandler>(defaultIsrHandler);
+			}
+		}
+		
+		static void defaultIsrHandler()
+		{
+			asm("bkpt 0");
+		}
+
+		void registerHandler(IRQn_Type irq, IrqHandler handler)
+		{
+			m_vectorTable[static_cast<int16_t>(irq) + 16] = handler;
+		}
+
+		void registerHandler(uint16_t irq, IrqHandler handler)
+		{
+			m_vectorTable[irq] = handler;
+		}
+
+		void unregisterHandler(IRQn_Type irq)
+		{
+			m_vectorTable[static_cast<int16_t>(irq) + 16] =  reinterpret_cast<IrqHandler>(defaultIsrHandler);
+		}
+
+		uint32_t tableBaseAddress()
+		{
+			uint32_t baseAddress = (uint32_t)&m_vectorTable;
+			return baseAddress;
+		}
+
+		IrqHandler getIsr(uint32_t isrNumber)
+		{
+			return m_vectorTable[isrNumber];
+		}
+		
+		
 		uint16_t getVectorTableSize()
 		{
 			return kVectorTableSize;
 		}
 
-		static void irqPriority(IRQn_Type irq,uint8_t preEmptPriority, uint8_t subPriority)
+		void irqPriority(IRQn_Type irq,uint8_t preEmptPriority, uint8_t subPriority)
 		{
-			uint8_t subMask = (0xFF >> (kNumberMaxOfInterruptBits - s_numberOfSubBits));
-			uint8_t preEmptMask = (0xFF >> (kNumberMaxOfInterruptBits - s_numberOfPreEmptBits));
+			uint8_t subMask = (0xFF >> (kNumberMaxOfInterruptBits - m_numberOfSubBits));
+			uint8_t preEmptMask = (0xFF >> (kNumberMaxOfInterruptBits - m_numberOfPreEmptBits));
 
 			if(subPriority > subMask)
 				subPriority = subMask;
@@ -85,11 +119,11 @@ namespace kernel
 				preEmptPriority = preEmptMask;
 
 			uint8_t priority = static_cast<uint8_t>((subPriority)+
-					(preEmptPriority << s_numberOfSubBits));
+					(preEmptPriority << m_numberOfSubBits));
 			NVIC_SetPriority(irq,priority);
 		}
 
-		static void irqPriority(IRQn_Type irq, uint8_t globalPriority)
+		void irqPriority(IRQn_Type irq, uint8_t globalPriority)
 		{
 			uint8_t priorityMask = (0xFF >> (kPiorityOffsetBits));
 			if(globalPriority >priorityMask)
@@ -98,20 +132,20 @@ namespace kernel
 			NVIC_SetPriority(irq,globalPriority);
 		}
 
-		static void subPriorityBits(uint8_t numberOfBits)
+		void subPriorityBits(uint8_t numberOfBits)
 		{
 			if(numberOfBits > kNumberOfEnabledPriorityBits)
 				numberOfBits = kNumberOfEnabledPriorityBits;
 
-			s_numberOfSubBits = numberOfBits;
-			s_numberOfPreEmptBits = kNumberOfEnabledPriorityBits-s_numberOfSubBits;
+			m_numberOfSubBits = numberOfBits;
+			m_numberOfPreEmptBits = kNumberOfEnabledPriorityBits- m_numberOfSubBits;
 
 			SCB->AIRCR = ((SCB->AIRCR & ~(SCB_AIRCR_VECTKEY_Msk | SCB_AIRCR_PRIGROUP_Msk))
-					| ((kVectorKey << SCB_AIRCR_VECTKEY_Pos)| (s_numberOfSubBits << SCB_AIRCR_PRIGROUP_Pos)));
+					| ((kVectorKey << SCB_AIRCR_VECTKEY_Pos)| (m_numberOfSubBits << SCB_AIRCR_PRIGROUP_Pos)));
 
 		}
 
-		static uint8_t subPriorityBits()
+		uint8_t subPriorityBits()
 		{
 			return ((SCB->AIRCR & SCB_AIRCR_PRIGROUP_Msk) >> (SCB_AIRCR_PRIGROUP_Pos + (kPiorityOffsetBits)));
 		}
