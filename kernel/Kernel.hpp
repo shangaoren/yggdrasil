@@ -387,7 +387,7 @@ namespace kernel
 			ServiceCall::SvcNumber askedService;
 			uint32_t param0 = args[0], param1 = args[1], param2 = args[2];
 			
-			askedService = (reinterpret_cast<ServiceCall::SvcNumber*>(args[6]))[-2];
+			askedService = (reinterpret_cast<ServiceCall::SvcNumber*>(args[6]))[-2]; //get stacked PC, then -2 to get SVC instruction 
 			
 			switch (askedService)
 			{
