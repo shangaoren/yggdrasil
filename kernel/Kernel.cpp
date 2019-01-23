@@ -40,16 +40,17 @@ IntVectManager Scheduler::s_sysviewVectorTable = IntVectManager();
 bool Scheduler::s_schedulerStarted = false;
 volatile uint64_t Scheduler::s_ticks = 0;
 		
-Task* Scheduler::s_activeTask = nullptr;
+Task* volatile Scheduler::s_activeTask = nullptr;
+Task* volatile Scheduler::s_previousTask = nullptr;
 interface::ISystem* Scheduler::s_systemInterface = nullptr;
 uint32_t Scheduler::s_sysTickFreq = 1000;
 bool Scheduler::s_interruptInstalled = false;
 uint8_t Scheduler::s_systemPriority = 0;
-uint8_t Scheduler::s_subPriorityBits = 2;
+uint8_t Scheduler::s_subPriorityBits = 1;
 
 StartedList Scheduler::s_started;
 ReadyList Scheduler::s_ready;
 SleepingList Scheduler::s_sleeping;
 
-TaskWithStack<30> Scheduler::s_idle = TaskWithStack<30>(idleTaskFunction, 0,"Idle");
+TaskWithStack<256> Scheduler::s_idle = TaskWithStack<256>(idleTaskFunction, 0,"Idle");
 

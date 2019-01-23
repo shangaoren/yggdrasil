@@ -58,29 +58,8 @@ namespace kernel
 			sleepTask,
 			signalEvent,
 			waitEvent,
+			enterCriticalSection,
+			exitCriticalSection,
 		};
-			
-		
-		
-	protected:
-		
-		/*__attribute__((always_inline)) static inline uint32_t callSvc(kernel::ServiceCall::SvcNumber number) //test function
-		{
-			uint32_t returnValue;
-			asm volatile(
-				"MOV R0, #20\n\t" //push some parameters
-				"MOV R1, #2\n\t"
-				"MOV R2, #3\n\t"
-				"MOV R3, #4\n\t"
-				"SVC #number"::"r" (number));   	//call service 2
-		asm volatile("MOV %0,R0" : "=r" (returnValue));    //return the returned value
-		return returnValue;
-		}*/
-		
-		/*static __attribute__((naked)) uint32_t callSvc(uint32_t parameter0, uint32_t parameter1, uint32_t param2, SvcNumber number)
-		{
-			asm volatile("SVC %0"::"I" (0)); //call svc with number in R0
-			//return value will be in R0, function is naked so it will be there
-		}*/
 	};
 }

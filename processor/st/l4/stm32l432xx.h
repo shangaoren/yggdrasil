@@ -160,7 +160,7 @@ typedef enum
 
 #include <yggdrasil/processor/arm/core_cm4.h>            /* Cortex-M4 processor and core peripherals */
 #include <yggdrasil/processor/st/l4/system_stm32l4xx.h>
-#include <cstdint>
+#include <stdint.h>
 
 /** @addtogroup Peripheral_registers_structures
   * @{

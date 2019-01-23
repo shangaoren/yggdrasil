@@ -29,13 +29,13 @@ Software without prior written authorization from Florian GERARD
 #pragma once
 
 #ifdef STM32L432xx
-#include "../processor/ST/l4/stm32l432xx.h"
+#include "../processor/st/l4/stm32l432xx.h"
 #define VECTOR_TABLE_SIZE (99)
 #define VECTOR_TABLE_ALIGNEMENT (512)
 #endif 
 
 #ifdef STM32F411xe
-#include "../processor/st/F4/stm32f411xe.h"
+#include "../processor/st/f4/stm32f411xe.h"
 #define VECTOR_TABLE_SIZE (98)
 #define VECTOR_TABLE_ALIGNEMENT (512)
 #endif

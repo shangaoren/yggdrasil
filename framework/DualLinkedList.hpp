@@ -130,8 +130,10 @@ namespace framework
 			 *if return value is <0 compared superior to base*/
 			typedef int8_t(*Comparator)(UnderLyingType* base, UnderLyingType* compared);
 			
-			void insert(UnderLyingType* node, Comparator comparator)
+			bool insert(UnderLyingType* node, Comparator comparator)
 			{
+				if (node == nullptr)
+					return false;
 				DualLinkNode<UnderLyingType, List>* newNode = static_cast<DualLinkNode<UnderLyingType, List>*>(node);
 				newNode->m_next = nullptr;
 				newNode->m_previous = nullptr;
@@ -139,6 +141,7 @@ namespace framework
 				{
 					m_first = newNode;
 					m_count = 1;
+					return true;
 				}
 				else
 				{
@@ -156,7 +159,7 @@ namespace framework
 							m_count++;
 							if (iterator == m_first)
 								m_first = newNode;
-							return;
+							return true;
 						}
 						else
 						{
@@ -175,6 +178,7 @@ namespace framework
 							m_first = newNode;
 					}
 					m_count++;
+					return true;
 				}
 			}
 			
@@ -212,6 +216,23 @@ namespace framework
 					return true;
 				else
 					return false;
+			}
+			
+			bool contain(UnderLyingType* node)
+			{
+				if (node == nullptr)
+					return false;
+				DualLinkNode<UnderLyingType, List>* toFindNode = static_cast<DualLinkNode<UnderLyingType, List>*>(node);
+				DualLinkNode<UnderLyingType, List>* iteratorPtr = m_first;
+				uint32_t iteratorCounter = 0;
+				while (iteratorCounter < m_count)
+				{
+					if (iteratorPtr == toFindNode)
+						return true;
+					iteratorPtr = iteratorPtr->m_next;
+					iteratorCounter++; 
+				}
+				return false;
 			}
 			
 			UnderLyingType* peekFirst()

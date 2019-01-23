@@ -164,6 +164,26 @@ namespace kernel
 		{
 			NVIC_ClearPendingIRQ(irq);
 		}
+		
+		static inline void lockInterruptsLowerThan(uint8_t Priority)
+		{
+			__set_BASEPRI(static_cast<uint32_t>(Priority));
+		}
+		
+		static inline void unlockInterrupts()
+		{
+			__set_BASEPRI(0xFF);
+		}
+		
+		static inline void lockAllInterrupts()
+		{
+			__set_PRIMASK(1);
+		}
+		
+		static inline void enableAllInterrupts()
+		{
+			__set_PRIMASK(0);
+		}
 	};
 }
 
