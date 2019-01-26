@@ -57,7 +57,6 @@ namespace kernel
 		static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPriority, uint8_t numberOfSubBits)
 		{
 			if (s_schedulerStarted)	//Scheduler already started 
-<<<<<<< Updated upstream
 				return false;
 			if (s_ready.isEmpty()) //No Task in task list, cannot start Scheduler
 				return false;
@@ -71,49 +70,6 @@ namespace kernel
 			s_subPriorityBits = numberOfSubBits;	//Sets Number of subPriority bits for interrupts
 			s_systemPriority = systemInterruptPriority; //Sets Priority of System
 
-			if (!s_interruptInstalled)	//Install interrupt if not already installed
-				installSystemInterrupts();
-			systickInit();	//init systick
-
-			svc(ServiceCall::SvcNumber::startFirstTask);	//Switch to service call to start the first task
-			__BKPT(0);	//shouldn't end here
-			return true;
-		}
-		
-		static bool startKernel(interface::ISystem& system)
-		{
-			if (s_schedulerStarted)	//Scheduler already started
-				return false;
-			if (s_ready.isEmpty())	//No Task in task list, cannot start Scheduler
-				return false;
-			
-			s_idle.start(); 	//Add idle task
-
-			s_systemInterface = &system;
-			if (!s_systemInterface->initSystemClock())	//Attempt to start system clock
-=======
-				return false;
-			if (s_ready.isEmpty()) //No Task in task list, cannot start Scheduler
-				return false;
-			
-			s_idle.start();	//Add idle task
-
-			s_systemInterface = &system;
-			if(!s_systemInterface->initSystemClock()) //Attempt to start system clock 
->>>>>>> Stashed changes
-				return false;
-			
-			s_subPriorityBits = numberOfSubBits;	//Sets Number of subPriority bits for interrupts
-			s_systemPriority = systemInterruptPriority; //Sets Priority of System
-
-<<<<<<< Updated upstream
-			if(!s_interruptInstalled)	//Install system interrupts if not already installed
-				installSystemInterrupts();
-			systickInit();	//Init systick
-
-			svc(ServiceCall::SvcNumber::startFirstTask);	//Switch to service call to start the first task
-			__BKPT(0);	//shouldn't end here
-=======
 			if (!s_interruptInstalled)	//Install interrupt if not already installed
 				installSystemInterrupts();
 			systickInit();	//init systick
@@ -135,14 +91,15 @@ namespace kernel
 			s_systemInterface = &system;
 			if (!s_systemInterface->initSystemClock())	//Attempt to start system clock
 				return false;
+			if (s_ready.isEmpty()) //No Task in task list, cannot start Scheduler
+				return false;
 
-			if(!s_interruptInstalled)	//Install system interrupts if not already installed
+			if (!s_interruptInstalled)	//Install interrupt if not already installed
 				installSystemInterrupts();
-			systickInit();	//Init systick
+			systickInit();	//init systick
 
 			svc(ServiceCall::SvcNumber::startFirstTask);	//Switch to service call to start the first task
 			__BKPT(0);	//shouldn't end here
->>>>>>> Stashed changes
 			return true;
 		}
 		
@@ -411,11 +368,7 @@ namespace kernel
 			//Put active Task to sleep
 			if (s_sleeping.contain(s_activeTask))
 				__BKPT(0);
-<<<<<<< Updated upstream
-			if (!s_sleeping.insert(s_activeTask, Task::priorityCompare))
-=======
 			if (!s_sleeping.insert(s_activeTask, Task::sleepCompare))
->>>>>>> Stashed changes
 				__BKPT(0);
 			
 			//s_previous task should be empty since no context switch should be pending

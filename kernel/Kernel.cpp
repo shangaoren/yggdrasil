@@ -42,11 +42,7 @@ volatile uint64_t Scheduler::s_ticks = 0;
 		
 Task* volatile Scheduler::s_activeTask = nullptr;
 Task* volatile Scheduler::s_previousTask = nullptr;
-<<<<<<< Updated upstream
-interface::ISystem* Scheduler::s_systemInterface = nullptr;
-=======
 interfaces::ISystem* Scheduler::s_systemInterface = nullptr;
->>>>>>> Stashed changes
 uint32_t Scheduler::s_sysTickFreq = 1000;
 bool Scheduler::s_interruptInstalled = false;
 uint8_t Scheduler::s_systemPriority = 0;
