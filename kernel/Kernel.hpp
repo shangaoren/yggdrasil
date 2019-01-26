@@ -38,7 +38,7 @@ Software without prior written authorization from Florian GERARD
 #include "yggdrasil/interfaces/ISystem.hpp"
 
 #ifdef SYSVIEW
-#include "SEGGER_SYSVIEW.h"
+#include "yggdrasil/systemview/segger/SEGGER_SYSVIEW.h"
 #endif
 
 extern uint32_t _estack;
@@ -54,7 +54,7 @@ namespace kernel
 		friend class Task;
 	private:
 		
-		static bool startKernel(interface::ISystem& system, uint8_t systemInterruptPriority, uint8_t numberOfSubBits)
+		static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPriority, uint8_t numberOfSubBits)
 		{
 			if (s_schedulerStarted)	//Scheduler already started 
 				return false;
@@ -79,7 +79,7 @@ namespace kernel
 			return true;
 		}
 		
-		static bool startKernel(interface::ISystem& system)
+		static bool startKernel(interfaces::ISystem& system)
 		{
 			if (s_schedulerStarted)	//Scheduler already started
 				return false;
@@ -91,10 +91,12 @@ namespace kernel
 			s_systemInterface = &system;
 			if (!s_systemInterface->initSystemClock())	//Attempt to start system clock
 				return false;
+			if (s_ready.isEmpty()) //No Task in task list, cannot start Scheduler
+				return false;
 
-			if(!s_interruptInstalled)	//Install system interrupts if not already installed
+			if (!s_interruptInstalled)	//Install interrupt if not already installed
 				installSystemInterrupts();
-			systickInit();	//Init systick
+			systickInit();	//init systick
 
 			svc(ServiceCall::SvcNumber::startFirstTask);	//Switch to service call to start the first task
 			__BKPT(0);	//shouldn't end here
@@ -161,7 +163,7 @@ namespace kernel
 		static IntVectManager s_sysviewVectorTable;
 #endif
 		static IntVectManager s_vectorTable;
-		static interface::ISystem* s_systemInterface;
+		static interfaces::ISystem* s_systemInterface;
 		static bool s_interruptInstalled;
 		static uint8_t s_systemPriority;
 		static uint8_t s_subPriorityBits;
@@ -302,11 +304,19 @@ namespace kernel
 			}
 			else	//add task at the end of the waiting list
 			{
+				enterKernelCriticalSection();
 #ifdef SYSVIEW
 				SEGGER_SYSVIEW_OnTaskStopReady(reinterpret_cast<uint32_t>(s_activeTask), 0);  //TODO add cause
 #endif
 				event->m_list.insert(s_activeTask, Task::priorityCompare);
+				s_activeTask->m_state = Task::state::waiting;
+				if(s_previousTask == nullptr)
+					s_previousTask = s_activeTask;
+				s_activeTask = s_ready.getFirst();
+				if(s_activeTask == nullptr)
+					__BKPT(0);
 				setPendSv();
+				exitCriticalSection();
 			}
 			return true;
 		}
@@ -358,7 +368,7 @@ namespace kernel
 			//Put active Task to sleep
 			if (s_sleeping.contain(s_activeTask))
 				__BKPT(0);
-			if (!s_sleeping.insert(s_activeTask, Task::priorityCompare))
+			if (!s_sleeping.insert(s_activeTask, Task::sleepCompare))
 				__BKPT(0);
 			
 			//s_previous task should be empty since no context switch should be pending
@@ -629,8 +639,6 @@ namespace kernel
 		static void sysviewSvcStub()__attribute__((aligned(4))) __attribute__((naked))
 		{
 			uint32_t* stackedPointer;
-			uint32_t linkRegister;
-			
 			asm volatile(
 				"TST LR,#4\n\t" //test bit 2 of EXC_RETURN to know if MSP or PSP 
 				"ITE EQ\n\t"	//was used for stacking
@@ -639,7 +647,7 @@ namespace kernel
 				"MOV %0,R0\n\t" : "=r" (stackedPointer) :);
 			asm volatile("PUSH {LR}\n\t");     //stack LR to be able to return for exception
 			SEGGER_SYSVIEW_RecordEnterISR();
-			SvcHandler(stackedPointer);
+			svcHandler(stackedPointer);
 			SEGGER_SYSVIEW_RecordExitISR();
 			asm volatile("POP {LR}");     //unstack LR 
 			asm volatile("BX LR");    	//return from exception
@@ -658,11 +666,21 @@ namespace kernel
 				"MRS R3,CONTROL\n\t"//store CONTROL register into R3
 				"STMDB R0!,{R2-R11}\n\t" //store R4 to R11 memory pointed by R0 (stack), increment memory and rewrite the new adress to R0
 				"MOV %0,R0\n\t" //store stack pointer in task.stackPointer
+				"PUSH {LR}"	//save link return to be able to return later
 				: "=r" (stackPosition));
-
 			SEGGER_SYSVIEW_RecordExitISRToScheduler();
-
-			changeTask(stackPosition);		
+			enterKernelCriticalSection();
+			changeTask(stackPosition);
+			asm volatile(
+				"MOV R0,%0\n\t"		//load stack pointer from task.stackPointer
+				"LDMIA R0!,{R2-R11}\n\t"	//restore registers R4 to R11
+				"MOV LR,R2\n\t"		//reload Link register
+				"MSR CONTROL,R3\n\t"//reload CONTROL register
+				"ISB\n\t"				//Instruction synchronisation Barrier is recommended after changing CONTROL
+				"MSR PSP,R0\n\t"	//reload process stack pointer with task's stack pointer
+				::"r" (s_activeTask->m_stackPointer));
+			exitCriticalSection();
+			asm volatile("POP { PC }");
 		}		
 #endif		
 		

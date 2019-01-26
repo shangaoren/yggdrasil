@@ -82,6 +82,17 @@ namespace kernel
 			else
 				return false;
 		}
+
+		virtual bool isAlreadyUp()
+		{
+			return m_isRaised;
+		}
+
+		virtual void reset()
+		{
+			m_isRaised = false;
+		}
+
 		private:
 		
 		//------------------PRIVATE DATA------------------------

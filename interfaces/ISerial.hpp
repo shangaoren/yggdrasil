@@ -20,28 +20,55 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Except as contained in this notice, the name of Florian GERARD shall not be used 
-in advertising or otherwise to promote the sale, use or other dealings in this 
+Except as contained in this notice, the name of Florian GERARD shall not be used
+in advertising or otherwise to promote the sale, use or other dealings in this
 Software without prior written authorization from Florian GERARD
 
 */
 
 #pragma once
+
 #include <cstdint>
-
-
+#include <functional>
 
 namespace interfaces
 {
 
-class ISystem
+class ISerial
 {
-public:
-	virtual uint32_t getSystemCoreFrequency() = 0;
-	virtual uint32_t getPeripheralClock1Frequency() = 0;
-	virtual uint32_t getPeripheralClock2Frequency() = 0;
+public :
 
-	virtual bool initSystemClock() = 0;
+	virtual bool sendData(const uint8_t* data, uint16_t size) = 0;
+	virtual bool receiveData(uint8_t* buffer, uint16_t size, bool eof) = 0;
+	virtual bool circularReceive(uint8_t* buffer, uint16_t size, bool eof) = 0;
+
+	void onDataReceived(std::function<void(uint8_t* data, uint16_t size, bool eof)> callback)
+	{
+		m_dataReceived = callback;
+	}
+
+	void onDataSend(std::function<void(void)> callback)
+	{
+		m_dataSend = callback;
+	}
+
+protected:
+	void dataReceived(uint8_t* data, uint16_t size, bool eof)
+	{
+		if(m_dataReceived != nullptr)
+			m_dataReceived(data,size,eof);
+	}
+
+	void dataSend()
+	{
+		if(m_dataSend != nullptr)
+			m_dataSend();
+	}
+
+private:
+	std::function<void(uint8_t* data, uint16_t size, bool eof)> m_dataReceived = nullptr;
+	std::function<void(void)> m_dataSend = nullptr;
+
+
 };
-
 }

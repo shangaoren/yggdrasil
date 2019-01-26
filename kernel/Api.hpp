@@ -45,13 +45,13 @@ namespace kernel
 	public:
 		
 		/*Start Kernel with a specified system interruptPriority and a number of subPriority bits*/
-		static inline bool startKernel(interface::ISystem& system, uint8_t systemInterruptPriority, uint8_t numberOfSubPriorityBits)
+		static inline bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPriority, uint8_t numberOfSubPriorityBits)
 		{
 			return Scheduler::startKernel(system,systemInterruptPriority,numberOfSubPriorityBits);
 		}
 		
 		/* Start Kernel, assuming settings on system priotity and subPriority are already set, or default will be used */
-		static inline bool startKernel(interface::ISystem& system)
+		static inline bool startKernel(interfaces::ISystem& system)
 		{
 			return Scheduler::startKernel(system);
 		}
