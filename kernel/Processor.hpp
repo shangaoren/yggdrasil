@@ -75,3 +75,9 @@ Software without prior written authorization from Florian GERARD
 #define VECTOR_TABLE_SIZE (72)
 #define VECTOR_TABLE_ALIGNEMENT (512)
 #endif
+
+#ifdef STM32F746xx
+#include "../processor/st/f7/stm32f746xx.h"
+#define VECTOR_TABLE_SIZE (113)
+#define VECTOR_TABLE_ALIGNEMENT (512)
+#endif
