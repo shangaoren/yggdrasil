@@ -31,7 +31,7 @@ Software without prior written authorization from Florian GERARD
 
 
 
-namespace interface
+namespace interfaces
 {
 
 class ISystem

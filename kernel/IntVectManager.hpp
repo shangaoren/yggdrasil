@@ -33,7 +33,7 @@ Software without prior written authorization from Florian GERARD
 #include <math.h>
 
 #ifdef SYSVIEW
-#include "SEGGER_SYSVIEW.h"
+#include "yggdrasil/systemview/segger/SEGGER_SYSVIEW.h"
 #endif
 
 namespace kernel

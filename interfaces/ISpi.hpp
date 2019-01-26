@@ -20,41 +20,36 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Except as contained in this notice, the name of Florian GERARD shall not be used 
-in advertising or otherwise to promote the sale, use or other dealings in this 
+Except as contained in this notice, the name of Florian GERARD shall not be used
+in advertising or otherwise to promote the sale, use or other dealings in this
 Software without prior written authorization from Florian GERARD
 
 */
 
-#include "Kernel.hpp"
+#pragma once
+#include <cstdint>
+#include <functional>
 
+namespace interfaces
+{
+class ISpi
+{
+public:
+	virtual bool transfert(const uint8_t* inputBuffer, uint8_t* outputBuffer ,uint16_t transfertSize) = 0;
 
-using namespace kernel;
+	void onTransfertComplete(std::function<void(void)> callback)
+	{
+		m_transfertComplete = callback;
+	}
 
-IntVectManager Scheduler::s_vectorTable = IntVectManager();
-#ifdef SYSVIEW
-IntVectManager Scheduler::s_sysviewVectorTable = IntVectManager();
-#endif
+protected:
+	void onTransfertComplete()
+	{
+		if(m_transfertComplete != nullptr)
+			m_transfertComplete();
+	}
 
-
-bool Scheduler::s_schedulerStarted = false;
-volatile uint64_t Scheduler::s_ticks = 0;
-		
-Task* volatile Scheduler::s_activeTask = nullptr;
-Task* volatile Scheduler::s_previousTask = nullptr;
-<<<<<<< Updated upstream
-interface::ISystem* Scheduler::s_systemInterface = nullptr;
-=======
-interfaces::ISystem* Scheduler::s_systemInterface = nullptr;
->>>>>>> Stashed changes
-uint32_t Scheduler::s_sysTickFreq = 1000;
-bool Scheduler::s_interruptInstalled = false;
-uint8_t Scheduler::s_systemPriority = 0;
-uint8_t Scheduler::s_subPriorityBits = 1;
-
-StartedList Scheduler::s_started;
-ReadyList Scheduler::s_ready;
-SleepingList Scheduler::s_sleeping;
-
-TaskWithStack<256> Scheduler::s_idle = TaskWithStack<256>(idleTaskFunction, 0,"Idle");
-
+private:
+	std::function<void()> m_transfertComplete = nullptr;
+};
+}

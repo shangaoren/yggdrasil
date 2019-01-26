@@ -36,7 +36,7 @@ Software without prior written authorization from Florian GERARD
 #include "yggdrasil/framework/DualLinkedList.hpp"
 
 #ifdef SYSVIEW
-#include "SEGGER_SYSVIEW.h"
+#include "yggdrasil/systemview/segger/SEGGER_SYSVIEW.h"
 #endif
 
 namespace kernel
@@ -131,9 +131,7 @@ namespace kernel
 	private:
 		
 
-#ifdef SYSVIEW
-		SEGGER_SYSVIEW_TASKINFO m_info;
-#endif
+
 		uint32_t* m_stackPointer;
 		uint32_t* m_stackOrigin;
 
@@ -144,6 +142,9 @@ namespace kernel
 		bool m_started;
 		state m_state;
 		const char* m_name;
+#ifdef SYSVIEW
+		SEGGER_SYSVIEW_TASKINFO m_info;
+#endif
 		
 		
 		/*Compare two Task timestamps

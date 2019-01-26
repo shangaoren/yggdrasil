@@ -20,41 +20,55 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Except as contained in this notice, the name of Florian GERARD shall not be used 
-in advertising or otherwise to promote the sale, use or other dealings in this 
+Except as contained in this notice, the name of Florian GERARD shall not be used
+in advertising or otherwise to promote the sale, use or other dealings in this
 Software without prior written authorization from Florian GERARD
 
 */
 
-#include "Kernel.hpp"
+#pragma once
+
+#include <cstdint>
+#include <functional>
+
+namespace interfaces
+{
+
+class ISerial
+{
+public :
+
+	virtual bool sendData(const uint8_t* data, uint16_t size) = 0;
+	virtual bool receiveData(uint8_t* buffer, uint16_t size, bool eof) = 0;
+	virtual bool circularReceive(uint8_t* buffer, uint16_t size, bool eof) = 0;
+
+	void onDataReceived(std::function<void(uint8_t* data, uint16_t size, bool eof)> callback)
+	{
+		m_dataReceived = callback;
+	}
+
+	void onDataSend(std::function<void(void)> callback)
+	{
+		m_dataSend = callback;
+	}
+
+protected:
+	void dataReceived(uint8_t* data, uint16_t size, bool eof)
+	{
+		if(m_dataReceived != nullptr)
+			m_dataReceived(data,size,eof);
+	}
+
+	void dataSend()
+	{
+		if(m_dataSend != nullptr)
+			m_dataSend();
+	}
+
+private:
+	std::function<void(uint8_t* data, uint16_t size, bool eof)> m_dataReceived = nullptr;
+	std::function<void(void)> m_dataSend = nullptr;
 
 
-using namespace kernel;
-
-IntVectManager Scheduler::s_vectorTable = IntVectManager();
-#ifdef SYSVIEW
-IntVectManager Scheduler::s_sysviewVectorTable = IntVectManager();
-#endif
-
-
-bool Scheduler::s_schedulerStarted = false;
-volatile uint64_t Scheduler::s_ticks = 0;
-		
-Task* volatile Scheduler::s_activeTask = nullptr;
-Task* volatile Scheduler::s_previousTask = nullptr;
-<<<<<<< Updated upstream
-interface::ISystem* Scheduler::s_systemInterface = nullptr;
-=======
-interfaces::ISystem* Scheduler::s_systemInterface = nullptr;
->>>>>>> Stashed changes
-uint32_t Scheduler::s_sysTickFreq = 1000;
-bool Scheduler::s_interruptInstalled = false;
-uint8_t Scheduler::s_systemPriority = 0;
-uint8_t Scheduler::s_subPriorityBits = 1;
-
-StartedList Scheduler::s_started;
-ReadyList Scheduler::s_ready;
-SleepingList Scheduler::s_sleeping;
-
-TaskWithStack<256> Scheduler::s_idle = TaskWithStack<256>(idleTaskFunction, 0,"Idle");
-
+};
+}

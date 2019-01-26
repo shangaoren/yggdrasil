@@ -29,17 +29,16 @@ Software without prior written authorization from Florian GERARD
 
 #pragma once
 #include <cstdint>
+#include <functional>
 
 
-namespace interface
+namespace interfaces
 {
 
 	template<typename StreamType>
 		class IStream
 		{
 		public:
-	
-			typedef void(*callback)(StreamType* buffer, uint16_t size, bool eof);
 			
 			
 			//interface to send data througth stream
@@ -57,10 +56,12 @@ namespace interface
 	
 			
 			//function to setup callback for when data was received
-			void setupReceiveCallback(callback handler)
+			void onReceive(std::function<void(StreamType* data, uint16_t size, bool eof)> callback)
 			{
-				m_receiveCallback = handler;
+				m_receiveCallback = callback;
 			}
+
+		protected:
 	
 			//interface to receive data 
 			virtual void dataReceived(StreamType* data, uint16_t size, bool eof)
@@ -75,7 +76,7 @@ namespace interface
 	
 	
 		private:
-			callback m_receiveCallback;
+			std::function<void(StreamType* data, uint16_t size, bool eof)> m_receiveCallback;
 	
 		};
 	

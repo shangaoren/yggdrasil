@@ -74,9 +74,9 @@ using namespace kernel;
 		
 	void SystemView::sendTaskInfo(const kernel::Task* pTask) 
 	{
-			kernel::Scheduler::lockInterrupts();            // No scheduling to make sure the task list does not change while we are transmitting it
+			Scheduler::enterKernelCriticalSection();            // No scheduling to make sure the task list does not change while we are transmitting it
 			SEGGER_SYSVIEW_SendTaskInfo(&pTask->m_info);
-			kernel::Scheduler::unlockInterrupt();	// No scheduling to make sure the task list does not change while we are transmitting it
+			Scheduler::exitCriticalSection();	// No scheduling to make sure the task list does not change while we are transmitting it
 	}
 
 		/*********************************************************************
@@ -91,13 +91,13 @@ using namespace kernel;
 void SystemView::sendTaskList(void) 
 {
 	Task* ptr = Scheduler::s_started.peekFirst();
-	Scheduler::lockInterrupts(); 	// No scheduling to make sure the task list does not change while we are transmitting it
+	Scheduler::enterKernelCriticalSection(); 	// No scheduling to make sure the task list does not change while we are transmitting it
 	while(ptr != nullptr)
 	{
 		SystemView::sendTaskInfo(ptr);
 		ptr = framework::DualLinkNode<Task, StartedList>::next(ptr);
 	}
-	Scheduler::unlockInterrupt();             // No scheduling to make sure the task list does not change while we are transmitting it
+	Scheduler::exitCriticalSection();             // No scheduling to make sure the task list does not change while we are transmitting it
 }
 
 		
