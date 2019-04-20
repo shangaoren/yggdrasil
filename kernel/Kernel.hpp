@@ -243,10 +243,11 @@ namespace kernel
 		 ***/
 		static bool schedule()
 		{
+			enterKernelCriticalSection();
+			if(s_ready.count() == 0)
+				__BKPT(0);
 			if (s_ready.peekFirst()->m_taskPriority > s_activeTask->m_taskPriority) //a task with higher priority is waiting, trigger context switching
 			{
-				enterKernelCriticalSection();
-				
 				//Store currently running task
 				if (s_ready.contain(s_activeTask))
 					__BKPT(0);
@@ -254,6 +255,8 @@ namespace kernel
 					__BKPT(0);
 				
 				//If there is no task to be saved already, put active task in s_previousTask to save context
+				if(s_activeTask == nullptr)
+					__BKPT(0);
 				if(s_previousTask == nullptr)
 					s_previousTask = s_activeTask;
 				
@@ -261,13 +264,15 @@ namespace kernel
 				s_activeTask = s_ready.getFirst();
 				if (s_activeTask == nullptr)
 					__BKPT(0);
-				
 				exitCriticalSection();
 				setPendSv();
 				return true;
 			}
 			else
+			{
+				exitCriticalSection();
 				return false;
+			}
 		}
 		
 		
@@ -276,11 +281,13 @@ namespace kernel
 		{
 			if (!event->m_list.isEmpty())
 			{
+				enterKernelCriticalSection();
 				Task* newReadyTask = event->m_list.getFirst();
+				if(newReadyTask == nullptr)
+					__BKPT(0);
 #ifdef SYSVIEW
 				SEGGER_SYSVIEW_OnTaskStartReady(reinterpret_cast<uint32_t>(newReadyTask));
 #endif
-				enterKernelCriticalSection();
 				if (s_ready.contain(newReadyTask))
 					__BKPT(0);
 				if (!s_ready.insert(newReadyTask, Task::priorityCompare))
@@ -308,6 +315,8 @@ namespace kernel
 #ifdef SYSVIEW
 				SEGGER_SYSVIEW_OnTaskStopReady(reinterpret_cast<uint32_t>(s_activeTask), 0);  //TODO add cause
 #endif
+				if(s_activeTask == nullptr)
+					__BKPT(0);
 				event->m_list.insert(s_activeTask, Task::priorityCompare);
 				s_activeTask->m_state = Task::state::waiting;
 				if(s_previousTask == nullptr)
@@ -315,8 +324,8 @@ namespace kernel
 				s_activeTask = s_ready.getFirst();
 				if(s_activeTask == nullptr)
 					__BKPT(0);
-				setPendSv();
 				exitCriticalSection();
+				setPendSv();
 			}
 			return true;
 		}
@@ -414,6 +423,7 @@ namespace kernel
 				"MSR PSP,R0\n\t"	//reload process stack pointer with task's stack pointer
 				::"r" (s_activeTask->m_stackPointer));
 			exitCriticalSection();
+			__ISB();
 			asm volatile("POP { PC }");
 		}
 		
@@ -421,10 +431,13 @@ namespace kernel
 		static void changeTask(uint32_t* stackPosition)
 		{
 			//No Task to switch, error
-			if((s_previousTask == nullptr) || (s_activeTask == nullptr))
+			if(s_activeTask == nullptr)
 				__BKPT(0);
-			s_previousTask->m_stackPointer = stackPosition;    //save stackPosition
 			
+			if(!(s_previousTask == nullptr)) // avoid Spurious interrupt
+			{
+				s_previousTask->m_stackPointer = stackPosition;    //save stackPosition
+
 #ifdef SYSVIEW
 			SEGGER_SYSVIEW_OnTaskStopExec();
 			switch (s_activeTask->m_state)
@@ -455,7 +468,13 @@ namespace kernel
 				else
 					SEGGER_SYSVIEW_OnTaskStartExec(reinterpret_cast<uint32_t>(s_activeTask));
 #endif
-			s_previousTask = nullptr;  	//Context change done no need to know previous task anymore
+				s_previousTask = nullptr;  	//Context change done no need to know previous task anymore
+			}
+			else
+			{
+				__BKPT(0);
+				s_activeTask->m_stackPointer = stackPosition;
+			}
 		}
 		
 		
