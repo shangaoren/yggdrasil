@@ -103,7 +103,7 @@ namespace kernel
 		
 		
 		//------------------PRIVATE FUNCTION---------------------
-		static bool __attribute__((naked)) waitEventKernel(Event* event)
+		static bool __attribute__((naked, optimize("O0"))) waitEventKernel(Event* event)
 		{
 			asm volatile("PUSH {LR}");
 			svc(ServiceCall::SvcNumber::waitEvent);
@@ -112,7 +112,7 @@ namespace kernel
 				"BX LR");
 		}
 		
-		static bool __attribute__((naked)) signalEventKernel(Event* event)
+		static bool __attribute__((naked, optimize("O0"))) signalEventKernel(Event* event)
 		{
 			asm volatile("PUSH {LR}");
 			svc(ServiceCall::SvcNumber::signalEvent);

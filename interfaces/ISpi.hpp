@@ -35,21 +35,21 @@ namespace interfaces
 class ISpi
 {
 public:
-	virtual bool transfert(const uint8_t* inputBuffer, uint8_t* outputBuffer ,uint16_t transfertSize) = 0;
+	virtual bool transfer(const uint8_t* inputBuffer, uint8_t* outputBuffer ,uint16_t transferSize) = 0;
 
-	void onTransfertComplete(std::function<void(void)> callback)
+	void onTransferComplete(std::function<void(void)> callback)
 	{
-		m_transfertComplete = callback;
+		m_transferComplete = callback;
 	}
 
 protected:
-	void onTransfertComplete()
+	void transferComplete()
 	{
-		if(m_transfertComplete != nullptr)
-			m_transfertComplete();
+		if(m_transferComplete != nullptr)
+			m_transferComplete();
 	}
 
 private:
-	std::function<void()> m_transfertComplete = nullptr;
+	std::function<void()> m_transferComplete = nullptr;
 };
 }

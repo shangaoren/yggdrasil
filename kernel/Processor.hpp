@@ -52,7 +52,7 @@ Software without prior written authorization from Florian GERARD
 #define VECTOR_TABLE_ALIGNEMENT (512)
 #endif
 
-#ifdef STM32L476xx
+#if defined(STM32L476xx) || defined(STM32L476RG)
 #include "../processor/st/l4/stm32l476xx.h"
 #define VECTOR_TABLE_SIZE (98)
 #define VECTOR_TABLE_ALIGNEMENT (512)

@@ -54,7 +54,18 @@ namespace kernel
 		friend class Task;
 	private:
 		
-		static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPriority, uint8_t numberOfSubBits)
+		enum class changeTaskTrigger : uint32_t
+		{
+			enterSleep = 0,
+			exitSleep = 1,
+			waitForEvent = 2,
+			wakeByEvent = 3,
+			taskStarted = 4,
+			taskStopped = 5,
+			none = 20,
+		};
+		
+static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPriority, uint8_t numberOfSubBits)
 		{
 			if (s_schedulerStarted)	//Scheduler already started 
 				return false;
@@ -176,6 +187,8 @@ namespace kernel
 		static bool s_schedulerStarted;
 		volatile static uint64_t s_ticks;
 		
+		volatile static changeTaskTrigger s_trigger;
+		
 		static Task* volatile s_activeTask;
 		static Task* volatile s_previousTask;
 		static uint32_t s_sysTickFreq;
@@ -234,14 +247,14 @@ namespace kernel
 			task.m_started = true;
 			task.m_state = Task::state::ready;
 			if (s_schedulerStarted)
-				schedule();
+				schedule(kernel::Scheduler::changeTaskTrigger::taskStarted);
 			return true;
 		}
 		
 		/**
 		 * Look at ready task to see if a context switching is needed
 		 ***/
-		static bool schedule()
+		static bool schedule(changeTaskTrigger trigger)
 		{
 			enterKernelCriticalSection();
 			if(s_ready.count() == 0)
@@ -265,7 +278,7 @@ namespace kernel
 				if (s_activeTask == nullptr)
 					__BKPT(0);
 				exitCriticalSection();
-				setPendSv();
+				setPendSv(trigger);
 				return true;
 			}
 			else
@@ -293,7 +306,7 @@ namespace kernel
 				if (!s_ready.insert(newReadyTask, Task::priorityCompare))
 					__BKPT(0);
 				exitCriticalSection();
-				schedule();
+				schedule(kernel::Scheduler::changeTaskTrigger::wakeByEvent);
 			}
 			else
 				event->m_isRaised = true;
@@ -325,7 +338,7 @@ namespace kernel
 				if(s_activeTask == nullptr)
 					__BKPT(0);
 				exitCriticalSection();
-				setPendSv();
+				setPendSv(kernel::Scheduler::changeTaskTrigger::waitForEvent);
 			}
 			return true;
 		}
@@ -392,7 +405,7 @@ namespace kernel
 				__BKPT(0);
 			s_previousTask->m_state = Task::state::sleeping;
 			exitCriticalSection();
-			setPendSv(); //active task is sleeping, trigger context switch
+			setPendSv(kernel::Scheduler::changeTaskTrigger::enterSleep); //active task is sleeping, trigger context switch
 			return true;
 		}
 		
@@ -436,6 +449,7 @@ namespace kernel
 			
 			if(!(s_previousTask == nullptr)) // avoid Spurious interrupt
 			{
+				
 				s_previousTask->m_stackPointer = stackPosition;    //save stackPosition
 
 #ifdef SYSVIEW
@@ -469,6 +483,7 @@ namespace kernel
 					SEGGER_SYSVIEW_OnTaskStartExec(reinterpret_cast<uint32_t>(s_activeTask));
 #endif
 				s_previousTask = nullptr;  	//Context change done no need to know previous task anymore
+				s_trigger = kernel::Scheduler::changeTaskTrigger::none;
 			}
 			else
 			{
@@ -479,8 +494,9 @@ namespace kernel
 		
 		
 		//set pendSv, trigger context switch
-		static void setPendSv()
+		static void setPendSv(changeTaskTrigger trigger)
 		{
+			s_trigger = trigger;
 			SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
 		}
 		
@@ -503,7 +519,7 @@ namespace kernel
 				exitCriticalSection();
 			}
 			if (needSchedule)
-				schedule();
+				schedule(kernel::Scheduler::changeTaskTrigger::exitSleep);
 			
 		}
 		
