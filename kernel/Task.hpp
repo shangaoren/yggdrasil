@@ -132,10 +132,10 @@ namespace kernel
 		
 
 
-		uint32_t* m_stackPointer;
+		uint32_t volatile* m_stackPointer;
 		uint32_t* m_stackOrigin;
 
-		uint32_t m_wakeUpTimeStamp;
+		volatile uint32_t m_wakeUpTimeStamp;
 		void(*m_mainFunction)(uint32_t);
 		
 		uint32_t m_taskPriority;

@@ -30,6 +30,7 @@ Software without prior written authorization from Florian GERARD
 #pragma once
 
 #include <cstdint>
+#include "yggdrasil/framework/Assertion.hpp"
 
 
 namespace framework
@@ -130,10 +131,10 @@ namespace framework
 			 *if return value is <0 compared superior to base*/
 			typedef int8_t(*Comparator)(UnderLyingType* base, UnderLyingType* compared);
 			
-			bool insert(UnderLyingType* node, Comparator comparator)
+			void insert(UnderLyingType* node, Comparator comparator)
 			{
-				if (node == nullptr)
-					return false;
+
+				Y_ASSERT(node != nullptr);
 				DualLinkNode<UnderLyingType, List>* newNode = static_cast<DualLinkNode<UnderLyingType, List>*>(node);
 				newNode->m_next = nullptr;
 				newNode->m_previous = nullptr;
@@ -141,7 +142,7 @@ namespace framework
 				{
 					m_first = newNode;
 					m_count = 1;
-					return true;
+					return;
 				}
 				else
 				{
@@ -159,7 +160,7 @@ namespace framework
 							m_count++;
 							if (iterator == m_first)
 								m_first = newNode;
-							return true;
+							return;
 						}
 						else
 						{
@@ -178,13 +179,14 @@ namespace framework
 							m_first = newNode;
 					}
 					m_count++;
-					return true;
+					return;
 				}
 			}
 			
 			
 			bool remove(UnderLyingType* node)
 			{
+				Y_ASSERT(node != nullptr);
 				DualLinkNode<UnderLyingType, List>* newNode = static_cast<DualLinkNode<UnderLyingType,List>*>(node);
 				DualLinkNode<UnderLyingType,List>* iteratorPtr = m_first;
 				uint32_t iteratorCounter = 0;

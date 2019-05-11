@@ -37,6 +37,8 @@ Software without prior written authorization from Florian GERARD
 #include "yggdrasil/framework/DualLinkedList.hpp"
 #include "yggdrasil/interfaces/ISystem.hpp"
 
+#include "yggdrasil/framework/Assertion.hpp"
+
 #ifdef SYSVIEW
 #include "yggdrasil/systemview/segger/SEGGER_SYSVIEW.h"
 #endif
@@ -136,7 +138,7 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 
 			//configure service call
 			s_vectorTable.registerHandler(SVCall_IRQn, svcBootstrap);
-			s_vectorTable.irqPriority(SVCall_IRQn, (s_systemPriority + 1));
+			s_vectorTable.irqPriority(SVCall_IRQn, (s_systemPriority+1));
 
 
 			//configure pendSv
@@ -234,7 +236,6 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 		{
 			if (task.m_started)
 				return false;
-			
 #ifdef SYSVIEW
 			SEGGER_SYSVIEW_OnTaskCreate(reinterpret_cast<uint32_t>(&task));
 			SEGGER_SYSVIEW_SendTaskInfo(&task.m_info);
@@ -257,26 +258,21 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 		static bool schedule(changeTaskTrigger trigger)
 		{
 			enterKernelCriticalSection();
-			if(s_ready.count() == 0)
-				__BKPT(0);
+			Y_ASSERT(s_activeTask != nullptr);
+			Y_ASSERT(s_ready.count() != 0); //assertion to check there is ready tasks
 			if (s_ready.peekFirst()->m_taskPriority > s_activeTask->m_taskPriority) //a task with higher priority is waiting, trigger context switching
 			{
 				//Store currently running task
-				if (s_ready.contain(s_activeTask))
-					__BKPT(0);
-				if (!s_ready.insert(s_activeTask, Task::priorityCompare))
-					__BKPT(0);
+				s_ready.insert(s_activeTask, Task::priorityCompare);
+				Y_ASSERT(!s_ready.contain(s_activeTask)); //currently running task not already in ready list
 				
 				//If there is no task to be saved already, put active task in s_previousTask to save context
-				if(s_activeTask == nullptr)
-					__BKPT(0);
 				if(s_previousTask == nullptr)
 					s_previousTask = s_activeTask;
 				
 				//Take the first available task
 				s_activeTask = s_ready.getFirst();
-				if (s_activeTask == nullptr)
-					__BKPT(0);
+				Y_ASSERT(s_activeTask != nullptr);
 				exitCriticalSection();
 				setPendSv(trigger);
 				return true;
@@ -296,15 +292,12 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 			{
 				enterKernelCriticalSection();
 				Task* newReadyTask = event->m_list.getFirst();
-				if(newReadyTask == nullptr)
-					__BKPT(0);
+				Y_ASSERT(newReadyTask != nullptr);
 #ifdef SYSVIEW
 				SEGGER_SYSVIEW_OnTaskStartReady(reinterpret_cast<uint32_t>(newReadyTask));
 #endif
-				if (s_ready.contain(newReadyTask))
-					__BKPT(0);
-				if (!s_ready.insert(newReadyTask, Task::priorityCompare))
-					__BKPT(0);
+				Y_ASSERT(!s_ready.contain(newReadyTask)); //If the event ready task is already in ready list, we have a problem
+				s_ready.insert(newReadyTask, Task::priorityCompare);
 				exitCriticalSection();
 				schedule(kernel::Scheduler::changeTaskTrigger::wakeByEvent);
 			}
@@ -328,15 +321,14 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 #ifdef SYSVIEW
 				SEGGER_SYSVIEW_OnTaskStopReady(reinterpret_cast<uint32_t>(s_activeTask), 0);  //TODO add cause
 #endif
-				if(s_activeTask == nullptr)
-					__BKPT(0);
-				event->m_list.insert(s_activeTask, Task::priorityCompare);
-				s_activeTask->m_state = Task::state::waiting;
+				Y_ASSERT(s_activeTask != nullptr);
+				Y_ASSERT(event->m_list.count() == 0); //should no have multiple waiters
+				event->m_list.insert(s_activeTask, Task::priorityCompare); //insert active task into event waiting list
+				s_activeTask->m_state = Task::state::waiting;	//sets active task as waiting
 				if(s_previousTask == nullptr)
-					s_previousTask = s_activeTask;
-				s_activeTask = s_ready.getFirst();
-				if(s_activeTask == nullptr)
-					__BKPT(0);
+					s_previousTask = s_activeTask; //put active task in previous for context switch, if no context switch is pending
+				Y_ASSERT(s_ready.count() != 0); //should have at least idle task
+				s_activeTask = s_ready.getFirst();	//take te first available task 
 				exitCriticalSection();
 				setPendSv(kernel::Scheduler::changeTaskTrigger::waitForEvent);
 			}
@@ -386,23 +378,17 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 			SEGGER_SYSVIEW_OnTaskStopReady(reinterpret_cast<uint32_t>(s_activeTask),0);
 #endif
 			enterKernelCriticalSection();
-			
+
 			//Put active Task to sleep
-			if (s_sleeping.contain(s_activeTask))
-				__BKPT(0);
-			if (!s_sleeping.insert(s_activeTask, Task::sleepCompare))
-				__BKPT(0);
-			
+			Y_ASSERT(!s_sleeping.contain(s_activeTask)); // if active task already in sleeping list we have a problem
+			s_sleeping.insert(s_activeTask, Task::sleepCompare);
 			//s_previous task should be empty since no context switch should be pending
-			if(s_previousTask != nullptr)
-				__BKPT(0);
-			else
-				s_previousTask = s_activeTask;
+			Y_ASSERT(s_previousTask == nullptr);
+			s_previousTask = s_activeTask;
 			
 			//Get the first available ready task
 			s_activeTask = s_ready.getFirst();
-			if (s_activeTask == nullptr)
-				__BKPT(0);
+			Y_ASSERT(s_activeTask != nullptr); // ready list should at least contain idle task
 			s_previousTask->m_state = Task::state::sleeping;
 			exitCriticalSection();
 			setPendSv(kernel::Scheduler::changeTaskTrigger::enterSleep); //active task is sleeping, trigger context switch
@@ -444,14 +430,10 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 		static void changeTask(uint32_t* stackPosition)
 		{
 			//No Task to switch, error
-			if(s_activeTask == nullptr)
-				__BKPT(0);
-			
+			Y_ASSERT(s_activeTask != nullptr);		
 			if(!(s_previousTask == nullptr)) // avoid Spurious interrupt
 			{
-				
 				s_previousTask->m_stackPointer = stackPosition;    //save stackPosition
-
 #ifdef SYSVIEW
 			SEGGER_SYSVIEW_OnTaskStopExec();
 			switch (s_activeTask->m_state)
@@ -482,12 +464,13 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 				else
 					SEGGER_SYSVIEW_OnTaskStartExec(reinterpret_cast<uint32_t>(s_activeTask));
 #endif
-				s_previousTask = nullptr;  	//Context change done no need to know previous task anymore
+				s_previousTask = nullptr; //Context change done no need to know previous task anymore
+				s_activeTask->m_state = kernel::Task::state::active;
 				s_trigger = kernel::Scheduler::changeTaskTrigger::none;
 			}
 			else
 			{
-				__BKPT(0);
+				Y_ASSERT(false); //trick to get breakpoint only when debug
 				s_activeTask->m_stackPointer = stackPosition;
 			}
 		}
@@ -512,10 +495,8 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 				enterKernelCriticalSection();
 				Task* readyTask = s_sleeping.getFirst();
 				readyTask->m_wakeUpTimeStamp = 0;
-				if (s_ready.contain(readyTask))
-					__BKPT(0);
-				if (!s_ready.insert(readyTask, Task::priorityCompare))
-					__BKPT(0);
+				Y_ASSERT(!s_ready.contain(readyTask)); //new Ready task should not being already in ready list
+				s_ready.insert(readyTask, Task::priorityCompare);
 				exitCriticalSection();
 			}
 			if (needSchedule)
@@ -646,7 +627,7 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 		{
 			do
 			{
-#ifdef DEBUG
+#ifdef NDEBUG
 				__NOP();
 #else
 				__WFI();
