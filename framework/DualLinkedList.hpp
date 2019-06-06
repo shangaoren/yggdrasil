@@ -260,7 +260,22 @@ namespace framework
 					return static_cast<UnderLyingType*>(ptr);
 				}
 			}
-			
+
+			/*UnderLyingType *operator[](uint32_t target)
+			{
+				UnderLyingType *ptr;
+				uint32_t i = 0U;
+					
+				if (target >= this->count())
+					return nullptr;
+				ptr = this->m_first;
+				while (i != target)
+				{
+					ptr = ptr->m_next;
+				}
+				return ptr;
+			}*/
+
 			uint32_t count()
 			{
 				return m_count;

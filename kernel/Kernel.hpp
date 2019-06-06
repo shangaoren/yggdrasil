@@ -152,19 +152,18 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 			s_interruptInstalled = true;
 		}
 
-		static bool __attribute__((aligned(4), , optimize("O0"))) startFirstTask()
+		static bool __attribute__((aligned(4), optimize("O0"))) startFirstTask()
 		{
 			//start a task, reset main stack pointer
 			s_activeTask = s_ready.getFirst();
 			s_schedulerStarted = true;
-			asm volatile(
-					"MOV R0,%0\n\t"		//load stack pointer from task.stackPointer
-					"LDMIA R0!,{R2-R11}\n\t"//restore registers R4 to R11
-					"MOV LR,R2\n\t"//reload Link register
-					"MSR CONTROL,R3\n\t"//reload CONTROL register
-					"ISB\n\t"//Instruction synchronisation Barrier is recommended after changing CONTROL
-					"MSR PSP,R0\n\t"//reload process stack pointer with task's stack pointer
-					::"r" (s_activeTask->m_stackPointer));
+			asm volatile("MOV R0,%0" //load stack pointer from task.stackPointer
+						 ::"r"(s_activeTask->m_stackPointer));
+			asm volatile("LDMIA R0!,{R2-R11}");//restore registers R4 to R11
+			asm volatile("MOV LR,R2");//reload Link register
+			asm volatile("MSR CONTROL,R3");//reload CONTROL register
+			asm volatile("ISB");//Instruction synchronisation Barrier is recommended after changing CONTROL
+			asm volatile("MSR PSP,R0"); //reload process stack pointer with task's stack pointer
 			//__set_MSP(_estack); //reset main stack pointer to save space (main is now useless)
 			asm volatile("BX LR"); //branch to task
 			return true; //should never return here
@@ -263,8 +262,9 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 			if (s_ready.peekFirst()->m_taskPriority > s_activeTask->m_taskPriority) //a task with higher priority is waiting, trigger context switching
 			{
 				//Store currently running task
-				s_ready.insert(s_activeTask, Task::priorityCompare);
 				Y_ASSERT(!s_ready.contain(s_activeTask)); //currently running task not already in ready list
+				s_ready.insert(s_activeTask, Task::priorityCompare);
+				
 				
 				//If there is no task to be saved already, put active task in s_previousTask to save context
 				if(s_previousTask == nullptr)
@@ -404,14 +404,14 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 		{
 			uint32_t* stackPosition = nullptr;
 			asm volatile(
+				"CPSID I\n\t"	//set primask (disable all interrupts)
 				"MRS R0, PSP\n\t"	//store Process Stack pointer into R0
 				"MOV R2,LR\n\t"		//store Link Register into R2
 				"MRS R3,CONTROL\n\t"//store CONTROL register into R3
 				"STMDB R0!,{R2-R11}\n\t" //store R4 to R11 memory pointed by R0 (stack), increment memory and rewrite the new adress to R0
-				"MOV %0,R0\n\t" //store stack pointer in task.stackPointer
-				"PUSH {LR}"	//save link return to be able to return later
+				"MOV %0,R0" //store stack pointer in task.stackPointer
+				///"PUSH {LR}"	//save link return to be able to return later
 				: "=r" (stackPosition));
-			enterKernelCriticalSection();
 			changeTask(stackPosition);
 			asm volatile(
 				"MOV R0,%0\n\t"		//load stack pointer from task.stackPointer
@@ -420,10 +420,9 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 				"MSR CONTROL,R3\n\t"//reload CONTROL register
 				"ISB\n\t"				//Instruction synchronisation Barrier is recommended after changing CONTROL
 				"MSR PSP,R0\n\t"	//reload process stack pointer with task's stack pointer
+				"CPSIE I\n\t"	//clear primask (enable interrupts)
 				::"r" (s_activeTask->m_stackPointer));
-			exitCriticalSection();
-			__ISB();
-			asm volatile("POP { PC }");
+			asm volatile("BX LR");
 		}
 		
 		

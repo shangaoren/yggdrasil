@@ -54,8 +54,6 @@ namespace kernel
 		{
 			asm volatile("PUSH {LR}");
 			svc(ServiceCall::SvcNumber::startTask);
-			asm volatile(
-				"POP {LR}\n\t"
-				"BX LR");
+			asm volatile("POP {PC}");
 		}
 }
