@@ -65,25 +65,25 @@ namespace kernel
 		friend class Event;
 		friend class SystemView;
 	public:
-		typedef void(*TaskFunc)(uint32_t);
-		
-		virtual bool start();
-		static bool startTaskStub(Task* task);
-		virtual bool stop();
-		static void taskFinished();
+	  
+	  typedef void (*TaskFunc)(uint32_t);
 
-		enum class state : uint32_t
-		{
-			sleeping = 0,
-			active = 1,
-			waiting = 2,
-			notStarted = 3,
-			ready = 4,
-		};
-		
-		constexpr Task(uint32_t stack[], uint32_t stackSize, TaskFunc function, uint32_t taskPriority, const char* name = "undefined", uint32_t parameter = 0)
-			: 
-			m_stackPointer(stack),
+	  virtual bool start();
+	  static bool startTaskStub(Task *task);
+	  virtual bool stop();
+	  static void taskFinished();
+
+	  enum class state : uint32_t
+	  {
+		  sleeping = 0,
+		  active = 1,
+		  waiting = 2,
+		  notStarted = 3,
+		  ready = 4,
+	  };
+
+	  constexpr Task(uint32_t stack[], uint32_t stackSize, TaskFunc function, uint32_t taskPriority, const char *name = "undefined", uint32_t parameter = 0)
+		  : m_stackPointer(stack),
 			m_stackOrigin(stack),
 			m_wakeUpTimeStamp(0),
 			m_mainFunction(function),
@@ -92,7 +92,8 @@ namespace kernel
 			m_state(state::notStarted),
 			m_name(name)
 #ifdef SYSVIEW
-			,m_info({0,nullptr,0,0,0})
+			,
+			m_info({0, nullptr, 0, 0, 0})
 #endif
 		{
 			m_stackPointer += (stackSize - 8); //move pointer to bottom of stack (higher @) and reserve place to hold 8 register
@@ -129,13 +130,10 @@ namespace kernel
 		}
 		
 	private:
-		
-
-
-		uint32_t* m_stackPointer;
+		uint32_t volatile* m_stackPointer;
 		uint32_t* m_stackOrigin;
 
-		uint32_t m_wakeUpTimeStamp;
+		volatile uint32_t m_wakeUpTimeStamp;
 		void(*m_mainFunction)(uint32_t);
 		
 		uint32_t m_taskPriority;

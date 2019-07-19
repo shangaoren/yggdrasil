@@ -37,6 +37,8 @@ Software without prior written authorization from Florian GERARD
 #include "yggdrasil/framework/DualLinkedList.hpp"
 #include "yggdrasil/interfaces/ISystem.hpp"
 
+#include "yggdrasil/framework/Assertion.hpp"
+
 #ifdef SYSVIEW
 #include "yggdrasil/systemview/segger/SEGGER_SYSVIEW.h"
 #endif
@@ -54,7 +56,18 @@ namespace kernel
 		friend class Task;
 	private:
 		
-		static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPriority, uint8_t numberOfSubBits)
+		enum class changeTaskTrigger : uint32_t
+		{
+			enterSleep = 0,
+			exitSleep = 1,
+			waitForEvent = 2,
+			wakeByEvent = 3,
+			taskStarted = 4,
+			taskStopped = 5,
+			none = 20,
+		};
+		
+static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPriority, uint8_t numberOfSubBits)
 		{
 			if (s_schedulerStarted)	//Scheduler already started 
 				return false;
@@ -125,7 +138,7 @@ namespace kernel
 
 			//configure service call
 			s_vectorTable.registerHandler(SVCall_IRQn, svcBootstrap);
-			s_vectorTable.irqPriority(SVCall_IRQn, (s_systemPriority + 1));
+			s_vectorTable.irqPriority(SVCall_IRQn, (s_systemPriority+1));
 
 
 			//configure pendSv
@@ -139,19 +152,18 @@ namespace kernel
 			s_interruptInstalled = true;
 		}
 
-		static bool __attribute__((aligned(4), , optimize("O0"))) startFirstTask()
+		static bool __attribute__((aligned(4), optimize("O0"))) startFirstTask()
 		{
 			//start a task, reset main stack pointer
 			s_activeTask = s_ready.getFirst();
 			s_schedulerStarted = true;
-			asm volatile(
-					"MOV R0,%0\n\t"		//load stack pointer from task.stackPointer
-					"LDMIA R0!,{R2-R11}\n\t"//restore registers R4 to R11
-					"MOV LR,R2\n\t"//reload Link register
-					"MSR CONTROL,R3\n\t"//reload CONTROL register
-					"ISB\n\t"//Instruction synchronisation Barrier is recommended after changing CONTROL
-					"MSR PSP,R0\n\t"//reload process stack pointer with task's stack pointer
-					::"r" (s_activeTask->m_stackPointer));
+			asm volatile("MOV R0,%0" //load stack pointer from task.stackPointer
+						 ::"r"(s_activeTask->m_stackPointer));
+			asm volatile("LDMIA R0!,{R2-R11}");//restore registers R4 to R11
+			asm volatile("MOV LR,R2");//reload Link register
+			asm volatile("MSR CONTROL,R3");//reload CONTROL register
+			asm volatile("ISB");//Instruction synchronisation Barrier is recommended after changing CONTROL
+			asm volatile("MSR PSP,R0"); //reload process stack pointer with task's stack pointer
 			//__set_MSP(_estack); //reset main stack pointer to save space (main is now useless)
 			asm volatile("BX LR"); //branch to task
 			return true; //should never return here
@@ -175,6 +187,8 @@ namespace kernel
 		
 		static bool s_schedulerStarted;
 		volatile static uint64_t s_ticks;
+		
+		volatile static changeTaskTrigger s_trigger;
 		
 		static Task* volatile s_activeTask;
 		static Task* volatile s_previousTask;
@@ -221,7 +235,6 @@ namespace kernel
 		{
 			if (task.m_started)
 				return false;
-			
 #ifdef SYSVIEW
 			SEGGER_SYSVIEW_OnTaskCreate(reinterpret_cast<uint32_t>(&task));
 			SEGGER_SYSVIEW_SendTaskInfo(&task.m_info);
@@ -234,38 +247,34 @@ namespace kernel
 			task.m_started = true;
 			task.m_state = Task::state::ready;
 			if (s_schedulerStarted)
-				schedule();
+				schedule(kernel::Scheduler::changeTaskTrigger::taskStarted);
 			return true;
 		}
 		
 		/**
 		 * Look at ready task to see if a context switching is needed
 		 ***/
-		static bool schedule()
+		static bool schedule(changeTaskTrigger trigger)
 		{
 			enterKernelCriticalSection();
-			if(s_ready.count() == 0)
-				__BKPT(0);
+			Y_ASSERT(s_activeTask != nullptr);
+			Y_ASSERT(s_ready.count() != 0); //assertion to check there is ready tasks
 			if (s_ready.peekFirst()->m_taskPriority > s_activeTask->m_taskPriority) //a task with higher priority is waiting, trigger context switching
 			{
 				//Store currently running task
-				if (s_ready.contain(s_activeTask))
-					__BKPT(0);
-				if (!s_ready.insert(s_activeTask, Task::priorityCompare))
-					__BKPT(0);
+				Y_ASSERT(!s_ready.contain(s_activeTask)); //currently running task not already in ready list
+				s_ready.insert(s_activeTask, Task::priorityCompare);
+				
 				
 				//If there is no task to be saved already, put active task in s_previousTask to save context
-				if(s_activeTask == nullptr)
-					__BKPT(0);
 				if(s_previousTask == nullptr)
 					s_previousTask = s_activeTask;
 				
 				//Take the first available task
 				s_activeTask = s_ready.getFirst();
-				if (s_activeTask == nullptr)
-					__BKPT(0);
+				Y_ASSERT(s_activeTask != nullptr);
 				exitCriticalSection();
-				setPendSv();
+				setPendSv(trigger);
 				return true;
 			}
 			else
@@ -283,17 +292,14 @@ namespace kernel
 			{
 				enterKernelCriticalSection();
 				Task* newReadyTask = event->m_list.getFirst();
-				if(newReadyTask == nullptr)
-					__BKPT(0);
+				Y_ASSERT(newReadyTask != nullptr);
 #ifdef SYSVIEW
 				SEGGER_SYSVIEW_OnTaskStartReady(reinterpret_cast<uint32_t>(newReadyTask));
 #endif
-				if (s_ready.contain(newReadyTask))
-					__BKPT(0);
-				if (!s_ready.insert(newReadyTask, Task::priorityCompare))
-					__BKPT(0);
+				Y_ASSERT(!s_ready.contain(newReadyTask)); //If the event ready task is already in ready list, we have a problem
+				s_ready.insert(newReadyTask, Task::priorityCompare);
 				exitCriticalSection();
-				schedule();
+				schedule(kernel::Scheduler::changeTaskTrigger::wakeByEvent);
 			}
 			else
 				event->m_isRaised = true;
@@ -315,17 +321,16 @@ namespace kernel
 #ifdef SYSVIEW
 				SEGGER_SYSVIEW_OnTaskStopReady(reinterpret_cast<uint32_t>(s_activeTask), 0);  //TODO add cause
 #endif
-				if(s_activeTask == nullptr)
-					__BKPT(0);
-				event->m_list.insert(s_activeTask, Task::priorityCompare);
-				s_activeTask->m_state = Task::state::waiting;
+				Y_ASSERT(s_activeTask != nullptr);
+				Y_ASSERT(event->m_list.count() == 0); //should no have multiple waiters
+				event->m_list.insert(s_activeTask, Task::priorityCompare); //insert active task into event waiting list
+				s_activeTask->m_state = Task::state::waiting;	//sets active task as waiting
 				if(s_previousTask == nullptr)
-					s_previousTask = s_activeTask;
-				s_activeTask = s_ready.getFirst();
-				if(s_activeTask == nullptr)
-					__BKPT(0);
+					s_previousTask = s_activeTask; //put active task in previous for context switch, if no context switch is pending
+				Y_ASSERT(s_ready.count() != 0); //should have at least idle task
+				s_activeTask = s_ready.getFirst();	//take te first available task 
 				exitCriticalSection();
-				setPendSv();
+				setPendSv(kernel::Scheduler::changeTaskTrigger::waitForEvent);
 			}
 			return true;
 		}
@@ -373,26 +378,20 @@ namespace kernel
 			SEGGER_SYSVIEW_OnTaskStopReady(reinterpret_cast<uint32_t>(s_activeTask),0);
 #endif
 			enterKernelCriticalSection();
-			
+
 			//Put active Task to sleep
-			if (s_sleeping.contain(s_activeTask))
-				__BKPT(0);
-			if (!s_sleeping.insert(s_activeTask, Task::sleepCompare))
-				__BKPT(0);
-			
+			Y_ASSERT(!s_sleeping.contain(s_activeTask)); // if active task already in sleeping list we have a problem
+			s_sleeping.insert(s_activeTask, Task::sleepCompare);
 			//s_previous task should be empty since no context switch should be pending
-			if(s_previousTask != nullptr)
-				__BKPT(0);
-			else
-				s_previousTask = s_activeTask;
+			Y_ASSERT(s_previousTask == nullptr);
+			s_previousTask = s_activeTask;
 			
 			//Get the first available ready task
 			s_activeTask = s_ready.getFirst();
-			if (s_activeTask == nullptr)
-				__BKPT(0);
+			Y_ASSERT(s_activeTask != nullptr); // ready list should at least contain idle task
 			s_previousTask->m_state = Task::state::sleeping;
 			exitCriticalSection();
-			setPendSv(); //active task is sleeping, trigger context switch
+			setPendSv(kernel::Scheduler::changeTaskTrigger::enterSleep); //active task is sleeping, trigger context switch
 			return true;
 		}
 		
@@ -405,14 +404,14 @@ namespace kernel
 		{
 			uint32_t* stackPosition = nullptr;
 			asm volatile(
+				"CPSID I\n\t"	//set primask (disable all interrupts)
 				"MRS R0, PSP\n\t"	//store Process Stack pointer into R0
 				"MOV R2,LR\n\t"		//store Link Register into R2
 				"MRS R3,CONTROL\n\t"//store CONTROL register into R3
 				"STMDB R0!,{R2-R11}\n\t" //store R4 to R11 memory pointed by R0 (stack), increment memory and rewrite the new adress to R0
-				"MOV %0,R0\n\t" //store stack pointer in task.stackPointer
-				"PUSH {LR}"	//save link return to be able to return later
+				"MOV %0,R0" //store stack pointer in task.stackPointer
+				///"PUSH {LR}"	//save link return to be able to return later
 				: "=r" (stackPosition));
-			enterKernelCriticalSection();
 			changeTask(stackPosition);
 			asm volatile(
 				"MOV R0,%0\n\t"		//load stack pointer from task.stackPointer
@@ -421,23 +420,19 @@ namespace kernel
 				"MSR CONTROL,R3\n\t"//reload CONTROL register
 				"ISB\n\t"				//Instruction synchronisation Barrier is recommended after changing CONTROL
 				"MSR PSP,R0\n\t"	//reload process stack pointer with task's stack pointer
+				"CPSIE I\n\t"	//clear primask (enable interrupts)
 				::"r" (s_activeTask->m_stackPointer));
-			exitCriticalSection();
-			__ISB();
-			asm volatile("POP { PC }");
+			asm volatile("BX LR");
 		}
 		
 		
 		static void changeTask(uint32_t* stackPosition)
 		{
 			//No Task to switch, error
-			if(s_activeTask == nullptr)
-				__BKPT(0);
-			
+			Y_ASSERT(s_activeTask != nullptr);		
 			if(!(s_previousTask == nullptr)) // avoid Spurious interrupt
 			{
 				s_previousTask->m_stackPointer = stackPosition;    //save stackPosition
-
 #ifdef SYSVIEW
 			SEGGER_SYSVIEW_OnTaskStopExec();
 			switch (s_activeTask->m_state)
@@ -468,19 +463,22 @@ namespace kernel
 				else
 					SEGGER_SYSVIEW_OnTaskStartExec(reinterpret_cast<uint32_t>(s_activeTask));
 #endif
-				s_previousTask = nullptr;  	//Context change done no need to know previous task anymore
+				s_previousTask = nullptr; //Context change done no need to know previous task anymore
+				s_activeTask->m_state = kernel::Task::state::active;
+				s_trigger = kernel::Scheduler::changeTaskTrigger::none;
 			}
 			else
 			{
-				__BKPT(0);
+				Y_ASSERT(false); //trick to get breakpoint only when debug
 				s_activeTask->m_stackPointer = stackPosition;
 			}
 		}
 		
 		
 		//set pendSv, trigger context switch
-		static void setPendSv()
+		static void setPendSv(changeTaskTrigger trigger)
 		{
+			s_trigger = trigger;
 			SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
 		}
 		
@@ -496,14 +494,12 @@ namespace kernel
 				enterKernelCriticalSection();
 				Task* readyTask = s_sleeping.getFirst();
 				readyTask->m_wakeUpTimeStamp = 0;
-				if (s_ready.contain(readyTask))
-					__BKPT(0);
-				if (!s_ready.insert(readyTask, Task::priorityCompare))
-					__BKPT(0);
+				Y_ASSERT(!s_ready.contain(readyTask)); //new Ready task should not being already in ready list
+				s_ready.insert(readyTask, Task::priorityCompare);
 				exitCriticalSection();
 			}
 			if (needSchedule)
-				schedule();
+				schedule(kernel::Scheduler::changeTaskTrigger::exitSleep);
 			
 		}
 		
@@ -630,7 +626,7 @@ namespace kernel
 		{
 			do
 			{
-#ifdef DEBUG
+#ifdef NDEBUG
 				__NOP();
 #else
 				__WFI();

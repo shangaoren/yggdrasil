@@ -39,6 +39,7 @@ IntVectManager Scheduler::s_sysviewVectorTable = IntVectManager();
 
 bool Scheduler::s_schedulerStarted = false;
 volatile uint64_t Scheduler::s_ticks = 0;
+volatile Scheduler::changeTaskTrigger Scheduler::s_trigger = Scheduler::changeTaskTrigger::none;
 		
 Task* volatile Scheduler::s_activeTask = nullptr;
 Task* volatile Scheduler::s_previousTask = nullptr;
