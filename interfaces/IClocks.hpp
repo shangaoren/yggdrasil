@@ -26,27 +26,22 @@ Software without prior written authorization from Florian GERARD
 
 */
 
-#include "Scheduler.hpp"
+#pragma once
+#include <cstdint>
 
 
-namespace kernel
+
+namespace core
 {
-	Core* Scheduler::s_core;
-
-
-	bool Scheduler::s_schedulerStarted = false;
-	bool Scheduler::s_interruptInstalled = false;
-	volatile uint64_t Scheduler::s_ticks = 0;
-	volatile Scheduler::changeTaskTrigger Scheduler::s_trigger = Scheduler::changeTaskTrigger::none;
-		
-	Task* volatile Scheduler::s_activeTask = nullptr;
-	Task* volatile Scheduler::s_previousTask = nullptr;
-	uint32_t Scheduler::s_sysTickFreq = 1000;
-	uint8_t Scheduler::s_systemPriority = 0;
-
-	StartedList Scheduler::s_started;
-	ReadyList Scheduler::s_ready;
-	SleepingList Scheduler::s_sleeping;
-	TaskWithStack<256> Scheduler::s_idle = TaskWithStack<256>(idleTaskFunction, 0, "Idle");
-
-}	//End namespace kernel
+	namespace interfaces
+	{
+		class IClocks
+		{
+		public:
+			virtual uint32_t getSystemCoreFrequency() = 0;
+			virtual bool initSystemClock() = 0;
+			virtual uint32_t getClockFrequency(uint32_t clockID) = 0;
+			
+		}; //End namespace IClocks
+	}	//End namespace interfaces
+} //End namespace core

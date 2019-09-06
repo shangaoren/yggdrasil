@@ -31,23 +31,18 @@ Software without prior written authorization from Florian GERARD
 
 #include "Task.hpp"
 #include "ServiceCall.hpp"
-#include "IntVectManager.hpp"
 #include "Event.hpp"
-#include "Processor.hpp"
-#include "yggdrasil/framework/DualLinkedList.hpp"
-#include "yggdrasil/interfaces/ISystem.hpp"
 
+#include "yggdrasil/interfaces/IVectorsManager.hpp"
+#include "yggdrasil/kernel/Core.hpp"
+#include "yggdrasil/framework/DualLinkedList.hpp"
 #include "yggdrasil/framework/Assertion.hpp"
 
-#ifdef SYSVIEW
-#include "yggdrasil/systemview/segger/SEGGER_SYSVIEW.h"
-#endif
-
-extern uint32_t _estack;
 
 
 namespace kernel
 {
+	using namespace core::interfaces;
 	class Scheduler
 	{
 		friend class ServiceCall;
@@ -55,6 +50,7 @@ namespace kernel
 		friend class SystemView;
 		friend class Task;
 	private:
+		
 		
 		enum class changeTaskTrigger : uint32_t
 		{
@@ -67,7 +63,13 @@ namespace kernel
 			none = 20,
 		};
 		
-static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPriority, uint8_t numberOfSubBits)
+		static void setupKernel(Core& systemCore, uint8_t systemPriority)
+		{
+			s_core = &systemCore;
+			s_systemPriority = systemPriority;
+		}
+		
+		static bool startKernel()
 		{
 			if (s_schedulerStarted)	//Scheduler already started 
 				return false;
@@ -75,81 +77,41 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 				return false;
 			
 			s_idle.start();	//Add idle task
-
-			s_systemInterface = &system;
-			if(!s_systemInterface->initSystemClock()) //Attempt to start system clock 
+			
+			if(!installKernelInterrupt())
 				return false;
 			
-			s_subPriorityBits = numberOfSubBits;	//Sets Number of subPriority bits for interrupts
-			s_systemPriority = systemInterruptPriority; //Sets Priority of System
-
-			if (!s_interruptInstalled)	//Install interrupt if not already installed
-				installSystemInterrupts();
-			systickInit();	//init systick
+			//Init Systick
+			s_core->systemTimer().initSystemTimer(s_core->coreClocks().getSystemCoreFrequency(), 1000);
+			s_core->systemTimer().startSystemTimer();
 
 			svc(ServiceCall::SvcNumber::startFirstTask);	//Switch to service call to start the first task
 			__BKPT(0);	//shouldn't end here
 			return true;
 		}
 		
-		static bool startKernel(interfaces::ISystem& system)
+		static bool installKernelInterrupt()
 		{
-			if (s_schedulerStarted)	//Scheduler already started
-				return false;
-			if (s_ready.isEmpty())	//No Task in task list, cannot start Scheduler
-				return false;
+			Y_ASSERT(s_core != nullptr);
+			// Install vector manager if not already done 
+			if(!s_core->vectorManager().isInstalled())
+			{
+				if (!s_core->vectorManager().installVectorManager())
+					return false;
+			}
 			
-			s_idle.start(); 	//Add idle task
-
-			s_systemInterface = &system;
-			if (!s_systemInterface->initSystemClock())	//Attempt to start system clock
-				return false;
-			if (s_ready.isEmpty()) //No Task in task list, cannot start Scheduler
-				return false;
-
-			if (!s_interruptInstalled)	//Install interrupt if not already installed
-				installSystemInterrupts();
-			systickInit();	//init systick
-
-			svc(ServiceCall::SvcNumber::startFirstTask);	//Switch to service call to start the first task
-			__BKPT(0);	//shouldn't end here
+			//Setup Systick
+			s_core->vectorManager().irqPriority(s_core->systemTimer().getIrq(), s_systemPriority);
+			s_core->vectorManager().registerHandler(s_core->systemTimer().getIrq(), systickHandler);
+			
+			//Setup Service Call interrupt 
+			s_core->vectorManager().irqPriority(SVCall_IRQn, s_systemPriority + 1);
+			s_core->vectorManager().registerHandler(SVCall_IRQn, svcBootstrap);
+			
+			//Setup pendSV interrupt (used for task change)
+			s_core->vectorManager().irqPriority(PendSV_IRQn, 0xFF); 	//Minimum priority for pendsv (task change)
+			s_core->vectorManager().registerHandler(PendSV_IRQn, pendSvHandler);
 			return true;
-		}
-		
-		static void installSystemInterrupts()
-		{
-			//set vectorTable
-			#ifdef SYSVIEW
-			sysviewInitInterruptStub();
-			SCB->VTOR = s_sysviewVectorTable.tableBaseAddress();
-			#else
-			SCB->VTOR = s_vectorTable.tableBaseAddress();
-			#endif
-
-			//configure severe interrupts
-			s_vectorTable.registerHandler(HardFault_IRQn, hardFault);
-			s_vectorTable.registerHandler(NonMaskableInt_IRQn, nmi);
-			s_vectorTable.registerHandler(UsageFault_IRQn, usageFault);
-			s_vectorTable.registerHandler(BusFault_IRQn, busFault);
-
-			/*Configure System Interrupts*/
-			s_vectorTable.subPriorityBits(s_subPriorityBits);
-
-
-			//configure service call
-			s_vectorTable.registerHandler(SVCall_IRQn, svcBootstrap);
-			s_vectorTable.irqPriority(SVCall_IRQn, (s_systemPriority+1));
-
-
-			//configure pendSv
-			s_vectorTable.registerHandler(PendSV_IRQn, pendSvHandler);
-			s_vectorTable.irqPriority(PendSV_IRQn, 0xFF);
-
-
-			//configure systick
-			s_vectorTable.registerHandler(SysTick_IRQn, systickHandler);
-			s_vectorTable.irqPriority(SysTick_IRQn, s_systemPriority);
-			s_interruptInstalled = true;
 		}
 
 		static bool __attribute__((aligned(4), optimize("O0"))) startFirstTask()
@@ -171,29 +133,25 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 		
 		/*****************************************************DATA*****************************************************/
 		
-#ifdef SYSVIEW
-		static IntVectManager s_sysviewVectorTable;
-#endif
-		static IntVectManager s_vectorTable;
-		static interfaces::ISystem* s_systemInterface;
-		static bool s_interruptInstalled;
+		/* Interrupts Variables */
+		static Core* s_core;
 		static uint8_t s_systemPriority;
-		static uint8_t s_subPriorityBits;
+		static bool s_interruptInstalled;
 		
+		/* Tasks Lists */
 		static ReadyList s_ready;
 		static SleepingList s_sleeping;
 		static StartedList s_started;
 		
-		
-		static bool s_schedulerStarted;
-		volatile static uint64_t s_ticks;
-		
+		/* Task Related Variables */
 		volatile static changeTaskTrigger s_trigger;
-		
 		static Task* volatile s_activeTask;
 		static Task* volatile s_previousTask;
 		static uint32_t s_sysTickFreq;
 		
+		/* Scheduler misc */
+		static bool s_schedulerStarted;
+		volatile static uint64_t s_ticks;
 		static TaskWithStack<256> s_idle;
 		
 		
@@ -203,17 +161,17 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 
 		
 		//register an Irq, only accessed via service call 
-		static inline bool IrqRegister(IRQn_Type irq, IntVectManager::IrqHandler handler)
+		static inline bool IrqRegister(IVectorManager::Irq irq, core::interfaces::IVectorManager::IrqHandler handler)
 		{
-			s_vectorTable.registerHandler(irq, handler);
+			s_core->vectorManager().registerHandler(irq, handler);
 			return true;
 		}
 		
 		
 		//unregister an Irq, only accessed via service call
-		static inline bool IrqUnregister(IRQn_Type irq)
+		static inline bool IrqUnregister(IVectorManager::Irq irq)
 		{
-			s_vectorTable.unregisterHandler(irq);
+			s_core->vectorManager().unregisterHandler(irq);
 			return true;
 		}
 		
@@ -221,25 +179,20 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 		/*Lock all interrupt lower or equal of system*/
 		static inline void enterKernelCriticalSection()
 		{
-			IntVectManager::lockAllInterrupts();
+			s_core->vectorManager().lockAllInterrupts();
 		}
 		
 		/*release Interrupt lock*/
 		static inline void exitCriticalSection()
 		{
-			IntVectManager::enableAllInterrupts();
+			s_core->vectorManager().enableAllInterrupts();
 		}
 		
 		//start a task
 		static bool startTask(Task& task)
 		{
 			if (task.m_started)
-				return false;
-#ifdef SYSVIEW
-			SEGGER_SYSVIEW_OnTaskCreate(reinterpret_cast<uint32_t>(&task));
-			SEGGER_SYSVIEW_SendTaskInfo(&task.m_info);
-			SEGGER_SYSVIEW_OnTaskStartReady(reinterpret_cast<uint32_t>(&task));
-#endif		
+				return false;		
 			enterKernelCriticalSection();
 			s_started.insert(&task, Task::priorityCompare);
 			s_ready.insert(&task, Task::priorityCompare);
@@ -293,9 +246,6 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 				enterKernelCriticalSection();
 				Task* newReadyTask = event->m_list.getFirst();
 				Y_ASSERT(newReadyTask != nullptr);
-#ifdef SYSVIEW
-				SEGGER_SYSVIEW_OnTaskStartReady(reinterpret_cast<uint32_t>(newReadyTask));
-#endif
 				Y_ASSERT(!s_ready.contain(newReadyTask)); //If the event ready task is already in ready list, we have a problem
 				s_ready.insert(newReadyTask, Task::priorityCompare);
 				exitCriticalSection();
@@ -318,9 +268,6 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 			else	//add task at the end of the waiting list
 			{
 				enterKernelCriticalSection();
-#ifdef SYSVIEW
-				SEGGER_SYSVIEW_OnTaskStopReady(reinterpret_cast<uint32_t>(s_activeTask), 0);  //TODO add cause
-#endif
 				Y_ASSERT(s_activeTask != nullptr);
 				Y_ASSERT(event->m_list.count() == 0); //should no have multiple waiters
 				event->m_list.insert(s_activeTask, Task::priorityCompare); //insert active task into event waiting list
@@ -340,9 +287,6 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 		/*TODO Implement*/
 		static bool stopTask(Task& task)
 		{
-#ifdef SYSVIEW
-			SEGGER_SYSVIEW_OnTaskStopExec();
-#endif
 			enterKernelCriticalSection();
 			s_ready.remove(&task);
 			s_sleeping.remove(&task);
@@ -350,10 +294,6 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 			if (s_activeTask == &task)
 			{
 				s_activeTask = s_ready.getFirst();	
-#ifdef SYSVIEW
-				SEGGER_SYSVIEW_OnTaskStopExec();
-				SEGGER_SYSVIEW_OnTaskStartExec(reinterpret_cast<uint32_t>(s_activeTask));
-#endif
 				s_activeTask->m_state = Task::state::active;
 				asm volatile(
 					"MOV R0,%0\n\t"		//load stack pointer from task.stackPointer
@@ -373,14 +313,11 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 		//function to sleep a task for a number of ms
 		static bool sleep(uint32_t ms)
 		{
-			s_activeTask->m_wakeUpTimeStamp = s_ticks + ms;	
-#ifdef SYSVIEW
-			SEGGER_SYSVIEW_OnTaskStopReady(reinterpret_cast<uint32_t>(s_activeTask),0);
-#endif
+			s_activeTask->m_wakeUpTimeStamp = s_ticks + ms;
 			enterKernelCriticalSection();
 
 			//Put active Task to sleep
-			Y_ASSERT(!s_sleeping.contain(s_activeTask)); // if active task already in sleeping list we have a problem
+			Y_ASSERT(!s_sleeping.contain(s_activeTask));  // if active task already in sleeping list we have a problem
 			s_sleeping.insert(s_activeTask, Task::sleepCompare);
 			//s_previous task should be empty since no context switch should be pending
 			Y_ASSERT(s_previousTask == nullptr);
@@ -388,15 +325,12 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 			
 			//Get the first available ready task
 			s_activeTask = s_ready.getFirst();
-			Y_ASSERT(s_activeTask != nullptr); // ready list should at least contain idle task
+			Y_ASSERT(s_activeTask != nullptr);  // ready list should at least contain idle task
 			s_previousTask->m_state = Task::state::sleeping;
 			exitCriticalSection();
-			setPendSv(kernel::Scheduler::changeTaskTrigger::enterSleep); //active task is sleeping, trigger context switch
+			setPendSv(kernel::Scheduler::changeTaskTrigger::enterSleep);  //active task is sleeping, trigger context switch
 			return true;
 		}
-		
-		
-		
 		
 		
 		//Handler of pendsv exception, act as context switcher
@@ -433,36 +367,6 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 			if(!(s_previousTask == nullptr)) // avoid Spurious interrupt
 			{
 				s_previousTask->m_stackPointer = stackPosition;    //save stackPosition
-#ifdef SYSVIEW
-			SEGGER_SYSVIEW_OnTaskStopExec();
-			switch (s_activeTask->m_state)
-			{
-			case kernel::Task::state::sleeping:
-				SEGGER_SYSVIEW_OnTaskStopReady(reinterpret_cast<uint32_t>(s_activeTask), 0); //Add cause
-				break;
-				
-			case kernel::Task::state::active:
-				__BKPT(0);
-				break;
-				
-			case kernel::Task::state::waiting:
-				SEGGER_SYSVIEW_OnTaskStopReady(reinterpret_cast<uint32_t>(s_activeTask), 1);    //TODO add cause
-				break;
-				
-			case kernel::Task::state::ready:
-				SEGGER_SYSVIEW_OnTaskStopReady(reinterpret_cast<uint32_t>(s_activeTask), 2);   //TODO add cause
-				break;
-				
-			default:
-				break;
-			}
-#endif	
-#ifdef SYSVIEW
-				if (s_activeTask == &s_idle)
-					SEGGER_SYSVIEW_OnIdle();
-				else
-					SEGGER_SYSVIEW_OnTaskStartExec(reinterpret_cast<uint32_t>(s_activeTask));
-#endif
 				s_previousTask = nullptr; //Context change done no need to know previous task anymore
 				s_activeTask->m_state = kernel::Task::state::active;
 				s_trigger = kernel::Scheduler::changeTaskTrigger::none;
@@ -503,26 +407,6 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 			
 		}
 		
-		static void hardFault()
-		{
-			__BKPT(0); //you fucked up
-		}
-
-		static void nmi()
-		{
-			__BKPT(0);	//you fucked up
-		}
-
-		static void usageFault()
-		{
-			__BKPT(0);	//you fucked up
-		}
-
-		static void busFault()
-		{
-			__BKPT(0);	//you fucked up
-		}
-		
 		
 		static void __attribute__((aligned(4))) __attribute__((naked, optimize("O0"))) svcBootstrap()
 		{
@@ -555,11 +439,11 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 				break;
 				
 			case ServiceCall::SvcNumber::registerIrq:
-				args[0] = IrqRegister(static_cast<IRQn_Type>(param0), reinterpret_cast<IntVectManager::IrqHandler>(param1));
+				args[0] = IrqRegister(static_cast<IVectorManager::Irq>(param0), reinterpret_cast<core::interfaces::IVectorManager::IrqHandler>(param1));
 				break;
 				
 			case ServiceCall::SvcNumber::unregisterIrq:
-				args[0] = IrqUnregister(static_cast<IRQn_Type>(param0));	//execute function and write result to stacked R0
+				args[0] = IrqUnregister(static_cast<IVectorManager::Irq>(param0)); 	//execute function and write result to stacked R0
 				break;
 				
 			case ServiceCall::SvcNumber::startTask:
@@ -583,30 +467,30 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 				break;
 				
 			case ServiceCall::SvcNumber::enableIrq:
-				IntVectManager::enableIrq(static_cast<IRQn_Type>(param0));
+				s_core->vectorManager().enableIrq(static_cast<IVectorManager::Irq>(param0));
 				break;
 
 			case ServiceCall::SvcNumber::disableIrq:
-				IntVectManager::disableIrq(static_cast<IRQn_Type>(param0));
+				s_core->vectorManager().disableIrq(static_cast<IVectorManager::Irq>(param0));
 				break;
 
 			case ServiceCall::SvcNumber::clearIrq:
-				IntVectManager::clearIrq(static_cast<IRQn_Type>(param0));
+				s_core->vectorManager().clearIrq(static_cast<IVectorManager::Irq>(param0));
 				break;
 
 			case ServiceCall::SvcNumber::setGlobalPriority:
-				s_vectorTable.irqPriority(static_cast<IRQn_Type>(param0),static_cast<uint8_t>(param1));
+				s_core->vectorManager().irqPriority(static_cast<IVectorManager::Irq>(param0), static_cast<uint8_t>(param1));
 				break;
 
 			case ServiceCall::SvcNumber::setPriority:
-				s_vectorTable.irqPriority(static_cast<IRQn_Type>(param0), static_cast<uint8_t>(param1), static_cast<uint8_t>(param2));
+				s_core->vectorManager().irqPriority(static_cast<IVectorManager::Irq>(param0), static_cast<uint8_t>(param1), static_cast<uint8_t>(param2));
 				break;
 			case ServiceCall::SvcNumber::enterCriticalSection:
-				IntVectManager::lockInterruptsLowerThan(s_systemPriority - 2);
+				s_core->vectorManager().lockInterruptsLowerThan(s_systemPriority - 2);
 				break;
 				
 			case ServiceCall::SvcNumber::exitCriticalSection:
-				IntVectManager::lockInterruptsLowerThan(0);	//set basepri to 0 in order to enable all interrupts 
+				s_core->vectorManager().lockInterruptsLowerThan(0); 	//set basepri to 0 in order to enable all interrupts 
 				break;
 
 			default:	//unknown Service call number
@@ -615,13 +499,7 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 			}
 		}
 		
-		static void systickInit()
-		{
-			SysTick->LOAD = ((s_systemInterface->getSystemCoreFrequency() / 1000) - 1u);
-			SysTick->VAL = 0;
-			SysTick->CTRL |= SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_TICKINT_Msk |  SysTick_CTRL_ENABLE_Msk;
-		}
-		
+		//Function of Idle Task (NOP when NDEBUG is defined, WFI when release)
 		static void idleTaskFunction(uint32_t param)
 		{
 			do
@@ -632,72 +510,7 @@ static bool startKernel(interfaces::ISystem& system, uint8_t systemInterruptPrio
 				__WFI();
 #endif
 			} while (true);
-		}
-#ifdef SYSVIEW
-		static void sysviewInitInterruptStub()
-		{
-			for (uint16_t i = 0; i < s_sysviewVectorTable.getVectorTableSize(); i++)
-			{
-				s_sysviewVectorTable.registerHandler(i,&sysviewInterruptStub);
-			}
-			s_sysviewVectorTable.registerHandler(SVCall_IRQn, sysviewSvcStub);
-			s_sysviewVectorTable.registerHandler(PendSV_IRQn, sysviewPendSvHandler);
-		}
-		
-		static void sysviewInterruptStub() __attribute__((aligned(4)))
-		{
-			SEGGER_SYSVIEW_RecordEnterISR();			
-			s_vectorTable.getIsr((SCB->ICSR & 0x3FF));
-			SEGGER_SYSVIEW_RecordExitISR();
-		}
-		
-		static void sysviewSvcStub()__attribute__((aligned(4))) __attribute__((naked))
-		{
-			uint32_t* stackedPointer;
-			asm volatile(
-				"TST LR,#4\n\t" //test bit 2 of EXC_RETURN to know if MSP or PSP 
-				"ITE EQ\n\t"	//was used for stacking
-				"MRSEQ R0, MSP\n\t"		//place msp or psp in R0 as parameter for SvcHandler
-				"MRSNE R0, PSP\n\t" 
-				"MOV %0,R0\n\t" : "=r" (stackedPointer) :);
-			asm volatile("PUSH {LR}\n\t");     //stack LR to be able to return for exception
-			SEGGER_SYSVIEW_RecordEnterISR();
-			svcHandler(stackedPointer);
-			SEGGER_SYSVIEW_RecordExitISR();
-			asm volatile("POP {LR}");     //unstack LR 
-			asm volatile("BX LR");    	//return from exception
-		}
-#endif
-		
-		
-#ifdef SYSVIEW		
-		//Handler of pendsv exception, act as context switcher
-		static void __attribute__((naked)) __attribute__((aligned(4))) sysviewPendSvHandler()
-		{
-			uint32_t* stackPosition = nullptr;
-			asm volatile(
-				"MRS R0, PSP\n\t"	//store Process Stack pointer into R0
-				"MOV R2,LR\n\t"		//store Link Register into R2
-				"MRS R3,CONTROL\n\t"//store CONTROL register into R3
-				"STMDB R0!,{R2-R11}\n\t" //store R4 to R11 memory pointed by R0 (stack), increment memory and rewrite the new adress to R0
-				"MOV %0,R0\n\t" //store stack pointer in task.stackPointer
-				"PUSH {LR}"	//save link return to be able to return later
-				: "=r" (stackPosition));
-			SEGGER_SYSVIEW_RecordExitISRToScheduler();
-			enterKernelCriticalSection();
-			changeTask(stackPosition);
-			asm volatile(
-				"MOV R0,%0\n\t"		//load stack pointer from task.stackPointer
-				"LDMIA R0!,{R2-R11}\n\t"	//restore registers R4 to R11
-				"MOV LR,R2\n\t"		//reload Link register
-				"MSR CONTROL,R3\n\t"//reload CONTROL register
-				"ISB\n\t"				//Instruction synchronisation Barrier is recommended after changing CONTROL
-				"MSR PSP,R0\n\t"	//reload process stack pointer with task's stack pointer
-				::"r" (s_activeTask->m_stackPointer));
-			exitCriticalSection();
-			asm volatile("POP { PC }");
 		}		
-#endif		
 		
 		static uint64_t getTicks()
 		{

@@ -7,8 +7,8 @@ namespace kernel
 		__BKPT(0);
 	}
 #ifdef KDEBUG
-#define Y_ASSERT(cond) ((cond) ? (void)0U : kernel::stop())
-	#else
-		#define Y_ASSERT(cond) ((void)0)
-	#endif
+	#define Y_ASSERT(cond) ((cond) ? (void)0U : kernel::stop())
+#else
+	#define Y_ASSERT(cond) ((void)0)
+#endif
 }

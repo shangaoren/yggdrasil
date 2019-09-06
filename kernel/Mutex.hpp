@@ -1,6 +1,6 @@
 /*MIT License
 
-Copyright (c) 2018 Florian GERARD
+Copyright (c) 2019 Florian GERARD
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -26,27 +26,26 @@ Software without prior written authorization from Florian GERARD
 
 */
 
-#include "Scheduler.hpp"
+#pragma once
 
+#include "Task.hpp"
 
 namespace kernel
 {
-	Core* Scheduler::s_core;
-
-
-	bool Scheduler::s_schedulerStarted = false;
-	bool Scheduler::s_interruptInstalled = false;
-	volatile uint64_t Scheduler::s_ticks = 0;
-	volatile Scheduler::changeTaskTrigger Scheduler::s_trigger = Scheduler::changeTaskTrigger::none;
+	template<class ObjectType, ObjectType& object>
+	class Mutex
+	{
+	public:
+		ObjectType* get(uint32_t timeout)
+		{
+				
+		}
 		
-	Task* volatile Scheduler::s_activeTask = nullptr;
-	Task* volatile Scheduler::s_previousTask = nullptr;
-	uint32_t Scheduler::s_sysTickFreq = 1000;
-	uint8_t Scheduler::s_systemPriority = 0;
-
-	StartedList Scheduler::s_started;
-	ReadyList Scheduler::s_ready;
-	SleepingList Scheduler::s_sleeping;
-	TaskWithStack<256> Scheduler::s_idle = TaskWithStack<256>(idleTaskFunction, 0, "Idle");
-
-}	//End namespace kernel
+		void release()
+		{
+			
+		}
+	private:
+		Task* m_owner;
+	};
+	}
