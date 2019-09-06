@@ -27,15 +27,15 @@ Software without prior written authorization from Florian GERARD
 */
 
 
-#include "Kernel.hpp"
+#include "Scheduler.hpp"
 
 namespace kernel
 {
 
 		bool Task::start()
 		{
-			if (Scheduler::s_interruptInstalled == false)
-				Scheduler::installSystemInterrupts();
+			if (!Scheduler::s_interruptInstalled)
+				Scheduler::installKernelInterrupt();
 			return startTaskStub(this);
 		}
 
@@ -54,8 +54,6 @@ namespace kernel
 		{
 			asm volatile("PUSH {LR}");
 			svc(ServiceCall::SvcNumber::startTask);
-			asm volatile(
-				"POP {LR}\n\t"
-				"BX LR");
+			asm volatile("POP {PC}");
 		}
 }

@@ -1,6 +1,6 @@
 /*MIT License
 
-Copyright (c) 2018 Florian GERARD
+Copyright (c) 2019 Florian GERARD
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -27,21 +27,25 @@ Software without prior written authorization from Florian GERARD
 */
 
 #pragma once
-#include <cstdint>
 
+#include "Task.hpp"
 
-
-namespace interfaces
+namespace kernel
 {
-
-class ISystem
-{
-public:
-	virtual uint32_t getSystemCoreFrequency() = 0;
-	virtual uint32_t getPeripheralClock1Frequency() = 0;
-	virtual uint32_t getPeripheralClock2Frequency() = 0;
-
-	virtual bool initSystemClock() = 0;
-};
-
-}
+	template<class ObjectType, ObjectType& object>
+	class Mutex
+	{
+	public:
+		ObjectType* get(uint32_t timeout)
+		{
+				
+		}
+		
+		void release()
+		{
+			
+		}
+	private:
+		Task* m_owner;
+	};
+	}

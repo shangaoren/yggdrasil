@@ -20,36 +20,28 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Except as contained in this notice, the name of Florian GERARD shall not be used
-in advertising or otherwise to promote the sale, use or other dealings in this
+Except as contained in this notice, the name of Florian GERARD shall not be used 
+in advertising or otherwise to promote the sale, use or other dealings in this 
 Software without prior written authorization from Florian GERARD
 
 */
 
 #pragma once
 #include <cstdint>
-#include <functional>
 
-namespace interfaces
+
+
+namespace core
 {
-class ISpi
-{
-public:
-	virtual bool transfert(const uint8_t* inputBuffer, uint8_t* outputBuffer ,uint16_t transfertSize) = 0;
-
-	void onTransfertComplete(std::function<void(void)> callback)
+	namespace interfaces
 	{
-		m_transfertComplete = callback;
-	}
-
-protected:
-	void onTransfertComplete()
-	{
-		if(m_transfertComplete != nullptr)
-			m_transfertComplete();
-	}
-
-private:
-	std::function<void()> m_transfertComplete = nullptr;
-};
-}
+		class IClocks
+		{
+		public:
+			virtual uint32_t getSystemCoreFrequency() = 0;
+			virtual bool initSystemClock() = 0;
+			virtual uint32_t getClockFrequency(uint32_t clockID) = 0;
+			
+		}; //End namespace IClocks
+	}	//End namespace interfaces
+} //End namespace core

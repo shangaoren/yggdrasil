@@ -30,7 +30,6 @@ Software without prior written authorization from Florian GERARD
 
 
 #include <cstdint>
-#include "IntVectManager.hpp"
 #include "Processor.hpp"
 
 #define svc(code) asm volatile("SVC %[immediate]"::[immediate] "I" (code))

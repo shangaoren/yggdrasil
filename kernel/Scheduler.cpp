@@ -26,59 +26,27 @@ Software without prior written authorization from Florian GERARD
 
 */
 
-
-#pragma once
-#include <cstdint>
-#include <functional>
+#include "Scheduler.hpp"
 
 
-namespace interfaces
+namespace kernel
 {
+	Core* Scheduler::s_core;
 
-	template<typename StreamType>
-		class IStream
-		{
-		public:
-			
-			
-			//interface to send data througth stream
-			virtual bool send(const StreamType* data, uint16_t size, int64_t timeout)
-			{
-				return (beginSend(data, size) && endSend(timeout));
-			}
-	
-			//interface to send data througth stream, typically starts DMA
-			virtual bool beginSend(const StreamType* data, uint16_t size) = 0;
-	
-			
-			//interface to wait for send to finish, typically wait for DMA interrupt
-			virtual bool endSend(int64_t timeout) = 0;
-	
-			
-			//function to setup callback for when data was received
-			void onReceive(std::function<void(StreamType* data, uint16_t size, bool eof)> callback)
-			{
-				m_receiveCallback = callback;
-			}
 
-		protected:
-	
-			//interface to receive data 
-			virtual void dataReceived(StreamType* data, uint16_t size, bool eof)
-			{
-				if (m_receiveCallback != nullptr)
-					m_receiveCallback(data, size, eof);
-			}
-	
-			//interface to setup receive interface, must be called after each datareceive
-			virtual void receive(StreamType* data, uint16_t size, bool eof) = 0;
+	bool Scheduler::s_schedulerStarted = false;
+	bool Scheduler::s_interruptInstalled = false;
+	volatile uint64_t Scheduler::s_ticks = 0;
+	volatile Scheduler::changeTaskTrigger Scheduler::s_trigger = Scheduler::changeTaskTrigger::none;
+		
+	Task* volatile Scheduler::s_activeTask = nullptr;
+	Task* volatile Scheduler::s_previousTask = nullptr;
+	uint32_t Scheduler::s_sysTickFreq = 1000;
+	uint8_t Scheduler::s_systemPriority = 0;
 
-	
-	
-		private:
-			std::function<void(StreamType* data, uint16_t size, bool eof)> m_receiveCallback;
-	
-		};
-	
-}
+	StartedList Scheduler::s_started;
+	ReadyList Scheduler::s_ready;
+	SleepingList Scheduler::s_sleeping;
+	TaskWithStack<256> Scheduler::s_idle = TaskWithStack<256>(idleTaskFunction, 0, "Idle");
 
+}	//End namespace kernel
