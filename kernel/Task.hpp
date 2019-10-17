@@ -63,6 +63,7 @@ namespace kernel
 	{
 		friend class Scheduler;
 		friend class Event;
+		friend class Mutex;
 		friend class SystemView;
 	public:
 	  
@@ -77,12 +78,13 @@ namespace kernel
 	  {
 		  sleeping = 0,
 		  active = 1,
-		  waiting = 2,
+		  waitingEvent = 2,
 		  notStarted = 3,
 		  ready = 4,
+		  waitingMutex = 5,
 	  };
 
-	  constexpr Task(uint32_t stack[], uint32_t stackSize, TaskFunc function, uint32_t taskPriority, const char *name = "undefined", uint32_t parameter = 0)
+		constexpr Task(uint32_t stack[], uint32_t stackSize, TaskFunc function, uint32_t taskPriority, uint32_t parameter = 0, const char *name = "undefined")
 		  : m_stackPointer(stack),
 			m_stackOrigin(stack),
 			m_wakeUpTimeStamp(0),
@@ -91,10 +93,6 @@ namespace kernel
 			m_started(false),
 			m_state(state::notStarted),
 			m_name(name)
-#ifdef SYSVIEW
-			,
-			m_info({0, nullptr, 0, 0, 0})
-#endif
 		{
 			m_stackPointer += (stackSize - 8); //move pointer to bottom of stack (higher @) and reserve place to hold 8 register
 			//stacked by hardware
@@ -118,15 +116,7 @@ namespace kernel
 			m_stackPointer[3] = 0;	//R5
 			m_stackPointer[2] = 0;	//R4
 			m_stackPointer[1] = 0x3;	//CONTROL, initial value, unprivileged, use PSP, no Floating Point 
-			m_stackPointer[0] = 0xFFFFFFFD;	//LR, return from exception, 8 Word Stack Length (no floating point), return in thread mode, use PSP	
-#ifdef SYSVIEW
-			m_info.sName = m_name;
-			m_info.Prio = m_taskPriority;
-			m_info.StackBase = reinterpret_cast<uint32_t>(m_stackOrigin);
-			m_info.TaskID = reinterpret_cast<uint32_t>(this);
-			m_info.StackSize = stackSize;
-#endif
-			
+			m_stackPointer[0] = 0xFFFFFFFD;	//LR, return from exception, 8 Word Stack Length (no floating point), return in thread mode, use PSP		
 		}
 		
 	private:
@@ -140,9 +130,6 @@ namespace kernel
 		bool m_started;
 		state m_state;
 		const char* m_name;
-#ifdef SYSVIEW
-		SEGGER_SYSVIEW_TASKINFO m_info;
-#endif
 		
 		
 		/*Compare two Task timestamps
@@ -192,8 +179,8 @@ namespace kernel
 		class TaskWithStack : public Task
 		{
 		public :
-			constexpr TaskWithStack<StackSize>(TaskFunc function, uint32_t taskPriority, const char* name = "undefined", uint32_t parameter = 0) :
-			Task(m_stack, StackSize, function, taskPriority, name, parameter)
+			constexpr TaskWithStack<StackSize>(TaskFunc function, uint32_t taskPriority, uint32_t parameter = 0, const char* name = "undefined") :
+			Task(m_stack, StackSize, function, taskPriority,parameter, name)
 			{
 			}
 			

@@ -32,20 +32,91 @@ Software without prior written authorization from Florian GERARD
 
 namespace kernel
 {
-	template<class ObjectType, ObjectType& object>
+	
+	
 	class Mutex
 	{
+		friend class Scheduler;
 	public:
-		ObjectType* get(uint32_t timeout)
+		
+		constexpr Mutex(): m_locked(false), m_waiting()
 		{
-				
 		}
 		
-		void release()
+		bool lock(uint32_t timeout = 0)
+		{
+			while (!serviceCallLockMutex(this, timeout)) ;
+			return true;
+		}
+		
+		bool release()
+		{
+			return serviceCallReleaseMutex(this);
+		}
+		
+		bool isLocked()
+		{
+			return m_locked;
+		}
+		
+	private:
+		bool m_locked;
+		EventList m_waiting;
+		
+		static bool kernelLockMutex(Mutex* mutex, uint32_t timeout);
+		static bool kernelReleaseMutex(Mutex* mutex);
+		
+		static bool __attribute__((naked, optimize("O0"))) serviceCallLockMutex(Mutex* self, uint32_t timeout)
+		{
+			asm volatile("PUSH {LR}");
+			svc(ServiceCall::SvcNumber::mutexLock);
+			asm volatile(
+				"POP {LR}\n\t"
+				"BX LR");
+		}
+		
+		static bool __attribute__((naked, optimize("O0"))) serviceCallReleaseMutex(Mutex* self)
+		{
+			asm volatile("PUSH {LR}");
+			svc(ServiceCall::SvcNumber::mutexRelease);
+			asm volatile(
+				"POP {LR}\n\t"
+				"BX LR");
+		}
+	};
+	
+template<class ObjectType>
+	class ObjectMutex
+	{
+	public:
+		constexpr ObjectMutex(ObjectType& object) : m_object(object), m_mutex()
 		{
 			
 		}
+		
+		// Obtain a pointer to the object protected by mutex, or nullptr if timeout expired
+		ObjectType* get(uint32_t timeout = 0)
+		{
+			if (m_mutex.lock() == true)
+				return &m_object;
+			else
+				return nullptr;
+		}
+		
+		// release the Object by giving the pointer back, the pointer will be nullptr if success
+		bool release(ObjectType* &object)
+		{
+			if (object != &m_object)	// check that the given object is really the object protected by mutex
+				return false;
+			if (m_mutex.release())
+			{
+				object = nullptr;
+				return true;
+			}
+		}
 	private:
-		Task* m_owner;
+
+		ObjectType& m_object;
+		Mutex m_mutex;
 	};
 	}

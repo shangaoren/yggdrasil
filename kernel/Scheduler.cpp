@@ -47,6 +47,6 @@ namespace kernel
 	StartedList Scheduler::s_started;
 	ReadyList Scheduler::s_ready;
 	SleepingList Scheduler::s_sleeping;
-	TaskWithStack<256> Scheduler::s_idle = TaskWithStack<256>(idleTaskFunction, 0, "Idle");
+	TaskWithStack<256> Scheduler::s_idle = TaskWithStack<256>(idleTaskFunction, 0, 0,"Idle");
 
 }	//End namespace kernel

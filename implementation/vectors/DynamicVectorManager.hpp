@@ -179,6 +179,7 @@ namespace implementation
 		
 			static void defaultIsrHandler()
 			{
+				uint8_t activeIsr = SCB->ICSR & 0xFF;
 				asm("bkpt 0");
 			}
 

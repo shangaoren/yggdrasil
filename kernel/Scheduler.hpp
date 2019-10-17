@@ -32,6 +32,7 @@ Software without prior written authorization from Florian GERARD
 #include "Task.hpp"
 #include "ServiceCall.hpp"
 #include "Event.hpp"
+#include "Mutex.hpp"
 
 #include "yggdrasil/interfaces/IVectorsManager.hpp"
 #include "yggdrasil/kernel/Core.hpp"
@@ -49,6 +50,8 @@ namespace kernel
 		friend class Api;
 		friend class SystemView;
 		friend class Task;
+		friend class Mutex;
+		friend class Event;
 	private:
 		
 		
@@ -60,6 +63,8 @@ namespace kernel
 			wakeByEvent = 3,
 			taskStarted = 4,
 			taskStopped = 5,
+			waitForMutex = 6,
+			wakeByMutex = 7,
 			none = 20,
 		};
 		
@@ -92,6 +97,8 @@ namespace kernel
 		
 		static bool installKernelInterrupt()
 		{
+			if (s_interruptInstalled)
+				return true;
 			Y_ASSERT(s_core != nullptr);
 			// Install vector manager if not already done 
 			if(!s_core->vectorManager().isInstalled())
@@ -111,6 +118,7 @@ namespace kernel
 			//Setup pendSV interrupt (used for task change)
 			s_core->vectorManager().irqPriority(PendSV_IRQn, 0xFF); 	//Minimum priority for pendsv (task change)
 			s_core->vectorManager().registerHandler(PendSV_IRQn, pendSvHandler);
+			s_interruptInstalled = true;
 			return true;
 		}
 
@@ -183,7 +191,7 @@ namespace kernel
 		}
 		
 		/*release Interrupt lock*/
-		static inline void exitCriticalSection()
+		static inline void exitKernelCriticalSection()
 		{
 			s_core->vectorManager().enableAllInterrupts();
 		}
@@ -196,7 +204,7 @@ namespace kernel
 			enterKernelCriticalSection();
 			s_started.insert(&task, Task::priorityCompare);
 			s_ready.insert(&task, Task::priorityCompare);
-			exitCriticalSection();
+			exitKernelCriticalSection();
 			task.m_started = true;
 			task.m_state = Task::state::ready;
 			if (s_schedulerStarted)
@@ -226,63 +234,18 @@ namespace kernel
 				//Take the first available task
 				s_activeTask = s_ready.getFirst();
 				Y_ASSERT(s_activeTask != nullptr);
-				exitCriticalSection();
+				exitKernelCriticalSection();
 				setPendSv(trigger);
 				return true;
 			}
 			else
 			{
-				exitCriticalSection();
+				exitKernelCriticalSection();
 				return false;
 			}
 		}
 		
-		
-		//Task rise an event
-		static bool signalEvent(Event* event)
-		{
-			if (!event->m_list.isEmpty())
-			{
-				enterKernelCriticalSection();
-				Task* newReadyTask = event->m_list.getFirst();
-				Y_ASSERT(newReadyTask != nullptr);
-				Y_ASSERT(!s_ready.contain(newReadyTask)); //If the event ready task is already in ready list, we have a problem
-				s_ready.insert(newReadyTask, Task::priorityCompare);
-				exitCriticalSection();
-				schedule(kernel::Scheduler::changeTaskTrigger::wakeByEvent);
-			}
-			else
-				event->m_isRaised = true;
-			return true;
-		}
-		
-		
-		//A task ask to wait for an event
-		static bool waitEvent(Event* event)
-		{
-			if (event->m_isRaised)	//event already rised, return
-			{
-				event->m_isRaised = false;
-				return true;
-			}
-			else	//add task at the end of the waiting list
-			{
-				enterKernelCriticalSection();
-				Y_ASSERT(s_activeTask != nullptr);
-				Y_ASSERT(event->m_list.count() == 0); //should no have multiple waiters
-				event->m_list.insert(s_activeTask, Task::priorityCompare); //insert active task into event waiting list
-				s_activeTask->m_state = Task::state::waiting;	//sets active task as waiting
-				if(s_previousTask == nullptr)
-					s_previousTask = s_activeTask; //put active task in previous for context switch, if no context switch is pending
-				Y_ASSERT(s_ready.count() != 0); //should have at least idle task
-				s_activeTask = s_ready.getFirst();	//take te first available task 
-				exitCriticalSection();
-				setPendSv(kernel::Scheduler::changeTaskTrigger::waitForEvent);
-			}
-			return true;
-		}
-		
-		
+
 		/*Stop a Task*/
 		/*TODO Implement*/
 		static bool stopTask(Task& task)
@@ -305,7 +268,7 @@ namespace kernel
 					"BX LR"
 					::"r" (s_activeTask->m_stackPointer));
 			}
-			exitCriticalSection();
+			exitKernelCriticalSection();
 			return true;
 		}
 		
@@ -327,7 +290,7 @@ namespace kernel
 			s_activeTask = s_ready.getFirst();
 			Y_ASSERT(s_activeTask != nullptr);  // ready list should at least contain idle task
 			s_previousTask->m_state = Task::state::sleeping;
-			exitCriticalSection();
+			exitKernelCriticalSection();
 			setPendSv(kernel::Scheduler::changeTaskTrigger::enterSleep);  //active task is sleeping, trigger context switch
 			return true;
 		}
@@ -400,7 +363,7 @@ namespace kernel
 				readyTask->m_wakeUpTimeStamp = 0;
 				Y_ASSERT(!s_ready.contain(readyTask)); //new Ready task should not being already in ready list
 				s_ready.insert(readyTask, Task::priorityCompare);
-				exitCriticalSection();
+				exitKernelCriticalSection();
 			}
 			if (needSchedule)
 				schedule(kernel::Scheduler::changeTaskTrigger::exitSleep);
@@ -429,8 +392,8 @@ namespace kernel
 		{
 			ServiceCall::SvcNumber askedService;
 			uint32_t param0 = args[0], param1 = args[1], param2 = args[2];
-			
-			askedService = (reinterpret_cast<ServiceCall::SvcNumber*>(args[6]))[-2]; //get stacked PC, then -2 to get SVC instruction 
+			//uint32_t& pc = *reinterpret_cast<uint32_t*>(args[6]);
+			askedService = (reinterpret_cast<ServiceCall::SvcNumber*>(args[6]))[-2];  //get stacked PC, then -2 to get SVC instruction 
 			
 			switch (askedService)
 			{
@@ -459,11 +422,11 @@ namespace kernel
 				break;
 				
 			case ServiceCall::SvcNumber::signalEvent:
-				signalEvent(reinterpret_cast<Event*>(param0));
+				Event::kernelSignalEvent(reinterpret_cast<Event*>(param0));
 				break;
 				
 			case ServiceCall::SvcNumber::waitEvent:
-				waitEvent(reinterpret_cast<Event*>(param0));
+				Event::kernelWaitEvent(reinterpret_cast<Event*>(param0));
 				break;
 				
 			case ServiceCall::SvcNumber::enableIrq:
@@ -491,6 +454,13 @@ namespace kernel
 				
 			case ServiceCall::SvcNumber::exitCriticalSection:
 				s_core->vectorManager().lockInterruptsLowerThan(0); 	//set basepri to 0 in order to enable all interrupts 
+				break;
+					
+			case kernel::ServiceCall::SvcNumber::mutexLock:
+				args [0] = Mutex::kernelLockMutex(reinterpret_cast<Mutex*>(param0), param1);
+				break;
+			case kernel::ServiceCall::SvcNumber::mutexRelease:
+				args[0] = Mutex::kernelReleaseMutex(reinterpret_cast<Mutex*>(param0));
 				break;
 
 			default:	//unknown Service call number

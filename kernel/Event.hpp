@@ -1,6 +1,6 @@
 /*MIT License
 
-Copyright (c) 2018 Florian GERARD
+Copyright (c) 2019 Florian GERARD
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -52,6 +52,9 @@ namespace kernel
 			
 		}
 		
+		static bool kernelSignalEvent(Event* event);
+		static bool kernelWaitEvent(Event* event);
+		
 		
 				
 		//wait for an event, used by Scheduler
@@ -61,7 +64,7 @@ namespace kernel
 		//false if event is already rised
 		virtual bool wait()
 		{
-			waitEventKernel(this);
+			serviceCallEventWait(this);
 			return true;
 		}
 		
@@ -71,7 +74,7 @@ namespace kernel
 		//else rise event and return nullptr
 		virtual bool signal()
 		{
-			signalEventKernel(this);
+			serviceCallEventSignal(this);
 			return true;
 		}
 		
@@ -102,8 +105,8 @@ namespace kernel
 		
 		
 		
-		//------------------PRIVATE FUNCTION---------------------
-		static bool __attribute__((naked, optimize("O0"))) waitEventKernel(Event* event)
+		//------------------PRIVATE FUNCTIONS---------------------
+		static bool __attribute__((naked, optimize("O0"))) serviceCallEventWait(Event* event)
 		{
 			asm volatile("PUSH {LR}");
 			svc(ServiceCall::SvcNumber::waitEvent);
@@ -112,7 +115,7 @@ namespace kernel
 				"BX LR");
 		}
 		
-		static bool __attribute__((naked, optimize("O0"))) signalEventKernel(Event* event)
+		static bool __attribute__((naked, optimize("O0"))) serviceCallEventSignal(Event* event)
 		{
 			asm volatile("PUSH {LR}");
 			svc(ServiceCall::SvcNumber::signalEvent);
@@ -120,6 +123,8 @@ namespace kernel
 				"POP {LR}\n\t"
 				"BX LR");
 		}
+		
+		//------------------PRIVATE KERNEL FUNCTIONS---------------------
 	
 		};
 	

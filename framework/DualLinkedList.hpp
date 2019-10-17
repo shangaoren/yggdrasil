@@ -131,6 +131,10 @@ namespace framework
 			 *if return value is <0 compared superior to base*/
 			typedef int8_t(*Comparator)(UnderLyingType* base, UnderLyingType* compared);
 			
+			constexpr DualLinkedList() : m_first(nullptr), m_count(0)
+			{
+			}
+			
 			void insert(UnderLyingType* node, Comparator comparator)
 			{
 

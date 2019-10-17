@@ -59,6 +59,8 @@ namespace kernel
 			waitEvent,
 			enterCriticalSection,
 			exitCriticalSection,
+			mutexLock,
+			mutexRelease,
 		};
 	};
 }
