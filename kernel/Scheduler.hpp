@@ -361,6 +361,7 @@ namespace kernel
 				enterKernelCriticalSection();
 				Task* readyTask = s_sleeping.getFirst();
 				readyTask->m_wakeUpTimeStamp = 0;
+				readyTask->m_state = kernel::Task::state::ready;
 				Y_ASSERT(!s_ready.contain(readyTask)); //new Ready task should not being already in ready list
 				s_ready.insert(readyTask, Task::priorityCompare);
 				exitKernelCriticalSection();
