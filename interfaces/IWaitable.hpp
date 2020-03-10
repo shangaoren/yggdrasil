@@ -25,22 +25,31 @@ in advertising or otherwise to promote the sale, use or other dealings in this
 Software without prior written authorization from Florian GERARD
 
 */
-
-
 #pragma once
 #include <cstdint>
-#include "yggdrasil/interfaces/IVectorsManager.hpp"
+#include "yggdrasil/framework/DualLinkedList.hpp"
 
-namespace core
+namespace kernel
 {
+	//Forward Declaration
+	class Scheduler;
+	class Task;
 	namespace interfaces
 	{
-		class ISystemTimer
+		
+		/* Interface to create object with a timeout */
+		class IWaitable
 		{
-		public:
-			virtual void initSystemTimer(uint32_t coreFrequency, uint32_t ticksFrequency) = 0;
-			virtual void startSystemTimer() = 0;
-			virtual IVectorManager::Irq getIrq() =0;
-		};
-	}	//End namespace interfaces
-}//End namespace core
+			friend class kernel::Scheduler;
+
+		  public:
+
+
+		  private:
+			virtual void stopWait(Task* task) = 0;
+
+			virtual void onTimeout(Task* task) = 0;
+
+		}; // class IWaitable
+	}	  // namespace interfaces
+} // namespace kernel

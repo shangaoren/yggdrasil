@@ -56,4 +56,5 @@ namespace kernel
 			svc(ServiceCall::SvcNumber::startTask);
 			asm volatile("POP {PC}");
 		}
+
 }

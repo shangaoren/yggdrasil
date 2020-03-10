@@ -29,24 +29,28 @@ Software without prior written authorization from Florian GERARD
 #pragma once
 
 #include "Task.hpp"
+#include "ServiceCall.hpp"
+#include "yggdrasil/interfaces/IWaitable.hpp"
 
 namespace kernel
 {
 	
 	
-	class Mutex
+	class Mutex : public interfaces::IWaitable
 	{
 		friend class Scheduler;
 	public:
 		
-		constexpr Mutex(): m_locked(false), m_waiting()
+		constexpr Mutex(): m_owner(nullptr)
 		{
 		}
-		
-		bool lock(uint32_t timeout = 0)
+
+		/* try to lock ressource, 
+		 * -timeout specify a time in ms to wait for ressoure, 0 for no timeout 
+		 * return 1 if wait success, 0 if unable to wait, -1 if timeout*/	
+		int16_t lock(uint32_t timeout = 0)
 		{
-			while (!serviceCallLockMutex(this, timeout)) ;
-			return true;
+			return serviceCallLockMutex(this, timeout);
 		}
 		
 		bool release()
@@ -56,17 +60,19 @@ namespace kernel
 		
 		bool isLocked()
 		{
-			return m_locked;
+			return m_owner != nullptr;
 		}
 		
 	private:
-		bool m_locked;
 		EventList m_waiting;
-		
-		static bool kernelLockMutex(Mutex* mutex, uint32_t timeout);
+		Task *m_owner;
+
+		static int16_t kernelLockMutex(Mutex* mutex, uint32_t duration);
 		static bool kernelReleaseMutex(Mutex* mutex);
-		
-		static bool __attribute__((naked, optimize("O0"))) serviceCallLockMutex(Mutex* self, uint32_t timeout)
+		void stopWait(Task *task);
+		void onTimeout(Task* task);
+
+		static int16_t __attribute__((naked, optimize("O0"))) serviceCallLockMutex(Mutex* self, uint32_t timeout)
 		{
 			asm volatile("PUSH {LR}");
 			svc(ServiceCall::SvcNumber::mutexLock);
@@ -97,7 +103,7 @@ template<class ObjectType>
 		// Obtain a pointer to the object protected by mutex, or nullptr if timeout expired
 		ObjectType* get(uint32_t timeout = 0)
 		{
-			if (m_mutex.lock() == true)
+			if (m_mutex.lock(timeout) == 1)
 				return &m_object;
 			else
 				return nullptr;
@@ -113,6 +119,7 @@ template<class ObjectType>
 				object = nullptr;
 				return true;
 			}
+			return false;
 		}
 	private:
 

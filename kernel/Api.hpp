@@ -67,9 +67,11 @@ namespace kernel
 		 *@Warning: do not call it if you're not in a Task*/
 		static void __attribute__((optimize("O0"))) sleep(uint32_t ms)
 		{
+			Scheduler::checkStack();
 			asm volatile(
 				"MOV R0,%0\n\t"
 				"SVC %[immediate]"::"r" (ms), [immediate] "I"(ServiceCall::SvcNumber::sleepTask));
+			Scheduler::checkStack();
 		}
 		
 		
@@ -80,11 +82,11 @@ namespace kernel
 		}
 		
 		/*register an irq before the scheduler has started*/
-		static void registerIrq(core::interfaces::IVectorManager::Irq irq, core::interfaces::IVectorManager::IrqHandler handler)
+		static void registerIrq(core::interfaces::IVectorManager::Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char* name)
 		{
 			if (Scheduler::s_interruptInstalled == false)
 				Scheduler::installKernelInterrupt();
-			registerIrqKernel(irq, handler);	
+			registerIrqKernel(irq, handler,name);	
 		}
 		
 		
@@ -107,6 +109,7 @@ namespace kernel
 
 		static inline void irqPriority(core::interfaces::IVectorManager::Irq irq, uint8_t priority)
 		{
+			Y_ASSERT(priority >= Scheduler::s_systemPriority);
 			if (Scheduler::s_interruptInstalled == false)
 				Scheduler::installKernelInterrupt();
 			irqGlobalPriorityKernel(irq,priority);
@@ -142,17 +145,17 @@ namespace kernel
 					"SVC %[immediate]"::"r" (irq), [immediate] "I"(ServiceCall::SvcNumber::clearIrq));
 		}
 		
-		static inline void setupInterrupt(core::interfaces::IVectorManager::Irq irq, core::interfaces::IVectorManager::IrqHandler handler, uint8_t priority)
+		static inline void setupInterrupt(core::interfaces::IVectorManager::Irq irq, core::interfaces::IVectorManager::IrqHandler handler, uint8_t priority, const char* name = nullptr)
 		{
-			registerIrq(irq, handler);
+			registerIrq(irq, handler, name);
 			irqPriority(irq, priority);
 			clearIrq(irq);
 			enableIrq(irq);
 		}
 		
-		static inline void setupInterrupt(core::interfaces::IVectorManager::Irq irq, core::interfaces::IVectorManager::IrqHandler handler, uint8_t preEmpt, uint8_t sub)
+		static inline void setupInterrupt(core::interfaces::IVectorManager::Irq irq, core::interfaces::IVectorManager::IrqHandler handler, uint8_t preEmpt, uint8_t sub, const char* name = nullptr)
 		{
-			registerIrq(irq, handler);
+			registerIrq(irq, handler, name);
 			irqPriority(irq, preEmpt, sub);
 			clearIrq(irq);
 			enableIrq(irq);
@@ -161,22 +164,26 @@ namespace kernel
 		/*Lock every interrupts below System*/
 		static void __attribute__((naked, optimize("O0"))) enterCriticalSection()
 		{
+			Scheduler::checkStack();
 			asm volatile("PUSH {LR}");
 			svc(ServiceCall::SvcNumber::enterCriticalSection);
 			asm volatile("POP {PC}");
+			Scheduler::checkStack();
 		}
 		
 		/*Unlock Interrupts*/
 		static void __attribute__((naked)) exitCriticalSection()
 		{
+			Scheduler::checkStack();
 			asm volatile("PUSH {LR}");
 			svc(ServiceCall::SvcNumber::exitCriticalSection);
 			asm volatile("POP {PC}");
+			Scheduler::checkStack();
 		}
 
 	private:
 		/*All Svc function are naked to keep Register with value stored when called*/
-		static bool __attribute__((naked)) registerIrqKernel(core::interfaces::IVectorManager::Irq irq, core::interfaces::IVectorManager::IrqHandler handler)
+		static bool __attribute__((naked)) registerIrqKernel(core::interfaces::IVectorManager::Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char* name)
 		{
 			asm volatile("PUSH {LR}");
 			svc(ServiceCall::SvcNumber::registerIrq);

@@ -34,14 +34,19 @@ namespace kernel
 	//Task rise an event
 	bool Event::kernelSignalEvent(Event* event)
 	{
-		if (!event->m_list.isEmpty())
+		Y_ASSERT(event != nullptr);
+		Hooks::onEventTrigger(event);
+		if (event->m_waiter != nullptr)
 		{
-			Scheduler::enterKernelCriticalSection();
-			Task* newReadyTask = event->m_list.getFirst();
-			Y_ASSERT(newReadyTask != nullptr);
-			Y_ASSERT(!Scheduler::s_ready.contain(newReadyTask));  //If the event ready task is already in ready list, we have a problem
+			Task* newReadyTask = event->m_waiter;
+			event->m_waiter = nullptr;
+			Y_ASSERT(!Scheduler::s_ready.contain(newReadyTask)); //If the event ready task is already in ready list, we have a problem
+			newReadyTask->m_waitingFor = nullptr;
+			event->stopWait(newReadyTask);
+			Y_ASSERT(!Scheduler::s_waiting.contain(newReadyTask)); 
 			Scheduler::s_ready.insert(newReadyTask, Task::priorityCompare);
-			Scheduler::exitKernelCriticalSection();
+			newReadyTask->m_state = kernel::Task::state::ready;
+			Hooks::onTaskReady(newReadyTask);
 			Scheduler::schedule(kernel::Scheduler::changeTaskTrigger::wakeByEvent);
 		}
 		else
@@ -51,27 +56,57 @@ namespace kernel
 		
 		
 	//A task ask to wait for an event
-	bool Event::kernelWaitEvent(Event* event)
+	// return 1 if wait success, 0 if unable to wait, -1 if timeout
+	int16_t Event::kernelWaitEvent(Event* event, uint32_t duration)
 	{
 		if (event->m_isRaised)	//event already rised, return
-			{
-				event->m_isRaised = false;
-				return true;
-			}
+		{
+			event->m_isRaised = false;
+			return 1;
+		}
 		else	//add task at the end of the waiting list
+		{
+
+			if (event->m_waiter != nullptr)
+				return 0;
+			//no need to lock as we are in SVC so nothing should interrupt and write this
+			Y_ASSERT(Scheduler::s_activeTask != nullptr);
+			event->m_waiter = Scheduler::s_activeTask; //insert active task into event waiting list
+			if (duration > 0)
 			{
-				Scheduler::enterKernelCriticalSection();
-				Y_ASSERT(Scheduler::s_activeTask != nullptr);
-				Y_ASSERT(event->m_list.count() == 0);  //should no have multiple waiters
-				event->m_list.insert(Scheduler::s_activeTask, Task::priorityCompare);  //insert active task into event waiting list
-				Scheduler::s_activeTask->m_state = Task::state::waitingEvent; 	//sets active task as waiting
-				if(Scheduler::s_previousTask == nullptr)
-					Scheduler::s_previousTask = Scheduler::s_activeTask;  //put active task in previous for context switch, if no context switch is pending
-				Y_ASSERT(Scheduler::s_ready.count() != 0);  //should have at least idle task
-				Scheduler::s_activeTask = Scheduler::s_ready.getFirst(); 	//take te first available task 
-				Scheduler::exitKernelCriticalSection();
-				Scheduler::setPendSv(kernel::Scheduler::changeTaskTrigger::waitForEvent);
+				Scheduler::s_activeTask->m_wakeUpTimeStamp = Scheduler::s_ticks + duration;
+				Scheduler::s_waiting.insert(Scheduler::s_activeTask, Task::sleepCompare);
 			}
-		return true;
-	} 
+			Scheduler::s_activeTask->m_waitingFor = event;
+			Scheduler::s_activeTask->m_state = Task::state::waitingEvent;		   //sets active task as waiting
+			Scheduler::s_taskToStack = Scheduler::s_activeTask;
+			Scheduler::s_activeTask = Scheduler::s_ready.getFirst();
+			Hooks::onTaskWaitEvent(Scheduler::s_taskToStack, event);
+			Scheduler::setPendSv(kernel::Scheduler::changeTaskTrigger::waitForEvent);
+			return 1;
+		}		
+	}
+
+	void Event::stopWait(Task* task)
+	{
+		if (task->m_wakeUpTimeStamp != 0)
+		{
+			Scheduler::s_waiting.remove(task);
+			task->m_wakeUpTimeStamp = 0;
+		}
+		
+	}
+	void Event::onTimeout(Task* task)
+	{
+		Hooks::onEventTimeout(this);
+		Y_ASSERT(task == m_waiter);
+		m_waiter = nullptr; // no more task waiting the event
+		task->m_waitingFor = nullptr; //the task is no more waiting for event
+		task->setReturnValue(static_cast<int16_t>(-1));
+		task->m_wakeUpTimeStamp = 0;
+		Scheduler::s_ready.insert(task, Task::priorityCompare);
+		task->m_state = kernel::Task::state::ready;
+		Hooks::onTaskReady(task);
+		Scheduler::schedule(kernel::Scheduler::changeTaskTrigger::wakeByEvent);
+	}
 }// End namespace kernel

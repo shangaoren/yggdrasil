@@ -32,17 +32,19 @@ Software without prior written authorization from Florian GERARD
 
 #include "Task.hpp" 
 #include "ServiceCall.hpp"
+#include "yggdrasil/interfaces/IWaitable.hpp"
+
 
 
 namespace kernel
 {
 	
-	class Event
+	class Event : public interfaces::IWaitable
 	{
 		friend class Scheduler; //let Scheduler access private function but no one else
 	public:
 		
-		Event(bool isRaised = false) : m_isRaised(isRaised)
+		constexpr Event(bool isRaised = false, const char*name = nullptr) :m_waiter(nullptr), m_isRaised(isRaised), m_name(name)
 		{
 		}
 		
@@ -53,7 +55,7 @@ namespace kernel
 		}
 		
 		static bool kernelSignalEvent(Event* event);
-		static bool kernelWaitEvent(Event* event);
+		static int16_t kernelWaitEvent(Event* event, uint32_t duration);
 		
 		
 				
@@ -62,17 +64,16 @@ namespace kernel
 		//@parameter Task waiting for the event
 		//return true if the task is waiting,
 		//false if event is already rised
-		virtual bool wait()
+		virtual inline int16_t wait(uint32_t duration = 0)
 		{
-			serviceCallEventWait(this);
-			return true;
+			return serviceCallEventWait(this, duration);
 		}
 		
 		
 		//Signal that an event occured
 		//if a task is already waiting then return it to wake it up
 		//else rise event and return nullptr
-		virtual bool signal()
+		virtual inline bool signal()
 		{
 			serviceCallEventSignal(this);
 			return true;
@@ -80,7 +81,7 @@ namespace kernel
 		
 		virtual bool someoneWaiting()
 		{
-			if (!m_list.isEmpty())
+			if (m_waiter != nullptr)
 				return true;
 			else
 				return false;
@@ -96,32 +97,33 @@ namespace kernel
 			m_isRaised = false;
 		}
 
-		private:
+		void stopWait(Task* task) final;
+		void onTimeout(Task* task) final;
+
+	  private:
 		
 		//------------------PRIVATE DATA------------------------
-		EventList m_list;
+		Task* volatile m_waiter;
 		bool m_isRaised;
-		
-		
-		
-		
+		const char *m_name;
+
 		//------------------PRIVATE FUNCTIONS---------------------
-		static bool __attribute__((naked, optimize("O0"))) serviceCallEventWait(Event* event)
+		static int16_t __attribute__((naked, optimize("O0"))) serviceCallEventWait(Event* event, uint32_t duration)
 		{
-			asm volatile("PUSH {LR}");
-			svc(ServiceCall::SvcNumber::waitEvent);
-			asm volatile(
-				"POP {LR}\n\t"
-				"BX LR");
+			asm volatile("PUSH {LR}\n\t"
+						"DSB \n\t"
+						 "SVC %[immediate]\n\t"
+						 "POP {LR}\n\t"
+						 "BX LR" ::[immediate] "I"(ServiceCall::SvcNumber::waitEvent));
 		}
 		
 		static bool __attribute__((naked, optimize("O0"))) serviceCallEventSignal(Event* event)
 		{
-			asm volatile("PUSH {LR}");
-			svc(ServiceCall::SvcNumber::signalEvent);
-			asm volatile(
-				"POP {LR}\n\t"
-				"BX LR");
+			asm volatile("PUSH {LR}\n\t"
+						 "DSB \n\t"
+						 "SVC %[immediate]\n\t"
+						 "POP {LR}\n\t"
+						 "BX LR"::[immediate] "I"(ServiceCall::SvcNumber::signalEvent)	);
 		}
 		
 		//------------------PRIVATE KERNEL FUNCTIONS---------------------

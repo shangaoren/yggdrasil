@@ -32,7 +32,8 @@ Software without prior written authorization from Florian GERARD
 #include <math.h>
 #include "yggdrasil/kernel/Processor.hpp"
 #include "yggdrasil/interfaces/IVectorsManager.hpp"
-#include "yggdrasil/framework/Assertion.hpp"
+#include "DynamicVectorManager.hpp"
+#include "yggdrasil/systemView/SystemView.hpp"
 
 
 namespace implementation
@@ -40,38 +41,40 @@ namespace implementation
 	namespace vectors
 	{
 		using namespace core::interfaces;
-		class DynamicVectorManager : public IVectorManager
+		class SysviewVectorManager : public IVectorManager
 		{
-		public:
-			DynamicVectorManager(uint8_t numberOfSubBits = 2, IrqHandler defaultHandler = &defaultIsrHandler): 
-				m_numberOfSubBits(numberOfSubBits), m_numberOfPreEmptBits(kNumberOfEnabledPriorityBits - m_numberOfSubBits), m_defaultHandler(defaultHandler)
+		  public:
+			SysviewVectorManager(uint8_t numberOfSubBits = 2) : m_numberOfSubBits(numberOfSubBits), m_numberOfPreEmptBits(kNumberOfEnabledPriorityBits - m_numberOfSubBits), m_defaultHandler(&kernel::SystemView::SysviewIsrHandler)
 			{
 				for (int i = 0; i < VECTOR_TABLE_SIZE; i++)
 				{
-					m_vectorTable[i] = reinterpret_cast<IrqHandler>(m_defaultHandler);
+					m_stubTable[i] = reinterpret_cast<IrqHandler>(m_defaultHandler);
 				}
+				m_stubTable[PendSV_IRQn + 16] = &kernel::SystemView::pendSvHandler;
+				m_stubTable[SVCall_IRQn + 16] = &kernel::SystemView::svcBootstrap;
 			}
 
-			virtual void __attribute__((optimize("O0"))) registerHandler(IVectorManager::Irq irq, IrqHandler handler, const char* name = nullptr) override final
+			virtual void __attribute__((optimize("O0"))) registerHandler(IVectorManager::Irq irq, IrqHandler handler, const char *name = nullptr) override final
 			{
-				m_vectorTable[static_cast<int16_t>(irq) + 16] = handler;	
+				// here pendsv, svc have no effect since they are overriden
+				m_irqTable.registerHandler(irq ,handler);
+				kernel::SystemView::get().registerInterrupt(name);
 			}
-
 
 			virtual void unregisterHandler(IVectorManager::Irq irq) override final
 			{
-				m_vectorTable[static_cast<int16_t>(irq) + 16] =  reinterpret_cast<IrqHandler>(m_defaultHandler);
+				m_irqTable.unregisterHandler(irq);
 			}
 
 			virtual uint32_t tableBaseAddress() override final
 			{
-				uint32_t baseAddress = reinterpret_cast<uint32_t>(&m_vectorTable);
+				uint32_t baseAddress = reinterpret_cast<uint32_t>(&m_stubTable);
 				return baseAddress;
 			}
 
 			virtual IrqHandler getIsr(uint32_t isrNumber) override final
 			{
-				return m_vectorTable[isrNumber];
+				return m_irqTable.getIsr(isrNumber);
 			}
 
 			virtual void __attribute__((optimize("O0"))) irqPriority(IVectorManager::Irq irq, uint8_t preEmptPriority, uint8_t subPriority) override final
@@ -85,7 +88,7 @@ namespace implementation
 					preEmptPriority = preEmptMask;
 
 				uint8_t priority = static_cast<uint8_t>((subPriority) +
-						(preEmptPriority << m_numberOfSubBits));
+														(preEmptPriority << m_numberOfSubBits));
 				NVIC_SetPriority(irq, priority);
 			}
 
@@ -106,9 +109,7 @@ namespace implementation
 				m_numberOfSubBits = numberOfBits;
 				m_numberOfPreEmptBits = kNumberOfEnabledPriorityBits - m_numberOfSubBits;
 
-				SCB->AIRCR = ((SCB->AIRCR & ~(SCB_AIRCR_VECTKEY_Msk | SCB_AIRCR_PRIGROUP_Msk))
-						| ((kVectorKey << SCB_AIRCR_VECTKEY_Pos) | (m_numberOfSubBits << SCB_AIRCR_PRIGROUP_Pos)));
-
+				SCB->AIRCR = ((SCB->AIRCR & ~(SCB_AIRCR_VECTKEY_Msk | SCB_AIRCR_PRIGROUP_Msk)) | ((kVectorKey << SCB_AIRCR_VECTKEY_Pos) | (m_numberOfSubBits << SCB_AIRCR_PRIGROUP_Pos)));
 			}
 
 			virtual uint8_t subPriorityBits() override final
@@ -130,62 +131,52 @@ namespace implementation
 			{
 				NVIC_ClearPendingIRQ(irq);
 			}
-		
-			virtual inline uint8_t lockInterruptsHigherThan(uint8_t Priority) override final 
+
+			virtual inline void lockInterruptsHigherThan(uint8_t Priority) override final
 			{
-				
-				uint8_t result = __get_BASEPRI() >> kPiorityOffsetBits;
-				Y_ASSERT(Priority != 0);
-				if (result > Priority | result == 0)
-					__set_BASEPRI(Priority << kPiorityOffsetBits);
-				return result;
+				__set_BASEPRI(static_cast<uint32_t>(Priority));
 			}
-		
-			virtual inline void unlockInterruptsHigherThan(uint8_t PriorityToRestore) override final
+
+			virtual inline void unlockInterrupts() override final
 			{
-				Y_ASSERT(PriorityToRestore != 0xF0);
-				uint8_t result = __get_BASEPRI()>> kPiorityOffsetBits;
-				if (result < PriorityToRestore | PriorityToRestore == 0)
-					__set_BASEPRI(PriorityToRestore << kPiorityOffsetBits);
-				__ISB();
+				__set_BASEPRI(0x00);
 			}
-		
+
 			virtual inline void __attribute__((optimize("O0"))) lockAllInterrupts() override final
 			{
-				asm volatile("MSR primask, %0": : "r"(1) : "memory");
-				//__set_PRIMASK(1);
+				asm volatile("CPSID I\n\t"
+								"ISB");
 			}
 
 			virtual inline void __attribute__((optimize("O0"))) enableAllInterrupts() override final
 			{
-				asm volatile("MSR primask, %0" : : "r"(0) : "memory");
-				__ISB();
-				//__set_PRIMASK(0);
+				asm volatile("CPSIE I\n\t"
+								"ISB");
 			}
-			
+
 			virtual inline bool isInstalled() override final
 			{
 				return SCB->VTOR == tableBaseAddress();
 			}
-			
+
 			virtual inline bool installVectorManager() override final
 			{
 				SCB->VTOR = tableBaseAddress();
 				return true;
 			}
-	
-		private:
 
+		  private:
 			static constexpr uint16_t kVectorTableSize = VECTOR_TABLE_SIZE;
 			static constexpr uint16_t kVectorTableAlignement = VECTOR_TABLE_ALIGNEMENT;
 			static constexpr uint16_t kNumberMaxOfInterruptBits = 8U;
 			static constexpr uint16_t kNumberOfEnabledPriorityBits = __NVIC_PRIO_BITS;
 			static constexpr uint16_t kPiorityOffsetBits = (kNumberMaxOfInterruptBits - kNumberOfEnabledPriorityBits);
 			static constexpr uint16_t kVectorKey = 0x05FAU;
-		
+
 			uint8_t m_numberOfSubBits;
 			uint8_t m_numberOfPreEmptBits;
-			IrqHandler m_vectorTable[kVectorTableSize] __attribute__((aligned(512))); //must be aligned with next power of 2 of table size
+			IrqHandler m_stubTable[kVectorTableSize] __attribute__((aligned(kVectorTableAlignement))); //must be aligned with next power of 2 of table size
+			DynamicVectorManager m_irqTable;
 			IrqHandler m_defaultHandler;
 
 			static void defaultIsrHandler()
@@ -195,8 +186,8 @@ namespace implementation
 				__get_IPSR();
 			}
 
-			
-		}; // End class DynamicVectorManager
-	}	//End namespace vectors
-}	//End namespace implementation
 
+
+		}; // End class DynamicVectorManager
+	}	  //End namespace vectors
+} //End namespace implementation

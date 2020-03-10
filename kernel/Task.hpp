@@ -25,19 +25,14 @@ in advertising or otherwise to promote the sale, use or other dealings in this
 Software without prior written authorization from Florian GERARD
 
 */
-
-
 #pragma once
 #include <cstdint>
 
 
 #include "ServiceCall.hpp"
-#include "Processor.hpp"
 #include "yggdrasil/framework/DualLinkedList.hpp"
+#include "yggdrasil/interfaces/IWaitable.hpp"
 
-#ifdef SYSVIEW
-#include "yggdrasil/systemview/segger/SEGGER_SYSVIEW.h"
-#endif
 
 namespace kernel
 {
@@ -45,21 +40,20 @@ namespace kernel
 	
 	class StartedList : public framework::DualLinkedList<Task, StartedList>
 	{};
-	
 	class ReadyList : public framework::DualLinkedList<Task, ReadyList>
 	{};
-	
 	class SleepingList : public framework::DualLinkedList<Task, SleepingList>
 	{};
-	
+	class WaitableList : public framework::DualLinkedList<Task, WaitableList>
+	{};
 	class EventList : public framework::DualLinkedList<Task, EventList>
 	{};
-	
-	class Task : 
-		public framework::DualLinkNode<Task,StartedList>,
-		public framework::DualLinkNode<Task,ReadyList>,
-		public framework::DualLinkNode<Task,SleepingList>,
-		public framework::DualLinkNode<Task,EventList>
+
+	class Task : public framework::DualLinkNode<Task, StartedList>,
+				 public framework::DualLinkNode<Task, ReadyList>,
+				 public framework::DualLinkNode<Task, SleepingList>,
+				 public framework::DualLinkNode<Task, WaitableList>,
+				 public framework::DualLinkNode<Task,EventList>
 	{
 		friend class Scheduler;
 		friend class Event;
@@ -67,7 +61,7 @@ namespace kernel
 		friend class SystemView;
 	public:
 	  
-	  typedef void (*TaskFunc)(uint32_t);
+	  using TaskFunc =  void (*)(uint32_t);
 
 	  virtual bool start();
 	  static bool startTaskStub(Task *task);
@@ -87,6 +81,7 @@ namespace kernel
 		constexpr Task(uint32_t stack[], uint32_t stackSize, TaskFunc function, uint32_t taskPriority, uint32_t parameter = 0, const char *name = "undefined")
 		  : m_stackPointer(stack),
 			m_stackOrigin(stack),
+			m_stackSize(stackSize),
 			m_wakeUpTimeStamp(0),
 			m_mainFunction(function),
 			m_taskPriority(taskPriority),
@@ -115,23 +110,24 @@ namespace kernel
 			m_stackPointer[4] = 0;	//R6
 			m_stackPointer[3] = 0;	//R5
 			m_stackPointer[2] = 0;	//R4
-			m_stackPointer[1] = 0x3;	//CONTROL, initial value, unprivileged, use PSP, no Floating Point 
-			m_stackPointer[0] = 0xFFFFFFFD;	//LR, return from exception, 8 Word Stack Length (no floating point), return in thread mode, use PSP		
+			m_stackPointer[1] = 0x3;	//CONTROL, initial value, unprivileged, use PSP, no Floating Point
+			m_stackPointer[0] = 0xFFFFFFFD; //LR, return from exception, 8 Word Stack Length (no floating point), return in thread mode, use PSP
+
 		}
 		
 	private:
 		uint32_t volatile* m_stackPointer;
 		uint32_t* m_stackOrigin;
+		uint32_t m_stackSize;
 
 		volatile uint32_t m_wakeUpTimeStamp;
-		void(*m_mainFunction)(uint32_t);
-		
+		interfaces::IWaitable* volatile m_waitingFor = nullptr;
+		TaskFunc m_mainFunction;
 		uint32_t m_taskPriority;
 		bool m_started;
 		state m_state;
 		const char* m_name;
-		
-		
+
 		/*Compare two Task timestamps
 		 * if base task was running after compared result is 1
 		 * if compared was running before base result is -1
@@ -171,8 +167,22 @@ namespace kernel
 				return 0;
 			return 0;
 		}
-		
-	
+
+		void setReturnValue(uint32_t value)
+		{
+			if ((*(m_stackPointer - 1) & 0b10000) == 0) // check bit #4 of control to know if stack contains floating point registers
+				*(reinterpret_cast<volatile int16_t *>(m_stackPointer + 10)) = value;
+			else
+				*(reinterpret_cast<volatile int16_t *>(m_stackPointer + 26)) = value; //TODO Test
+		}
+
+		void setReturnValue(int16_t value)
+		{
+			if ((*(m_stackPointer - 1) & 0b10000) == 0) // check bit #4 of control to know if stack contains floating point registers
+				*(reinterpret_cast<volatile int16_t *>(m_stackPointer + 10)) = value;
+			else
+				*(reinterpret_cast<volatile int16_t *>(m_stackPointer + 26)) = value; //TODO Test
+		}
 	};
 	
 	template<uint32_t StackSize>
@@ -185,7 +195,7 @@ namespace kernel
 			}
 			
 		private :
-			uint32_t m_stack[StackSize]__attribute__((aligned(4))); 
+			uint32_t m_stack[StackSize]__attribute__((aligned(8))); 
 			
 		};
-	}
+} // namespace kernel
