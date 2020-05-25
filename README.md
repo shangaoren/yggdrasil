@@ -6,8 +6,6 @@ If you have any remarks, advice, need some features, or else, feel free to send 
 
 I would be happy to know for which project Yggdrasil was useful to you ;)
 
-I have to thanks Thomas LEGRAND, CTO of EZNOV who gave me tips, curiosity and skills to create this RTOS,
-
-Philippe, Matthieu and Florent for helping me when i was stuck on coding tricks
+I have to thanks Philippe, Matthieu and Florent for helping me when i was stuck on coding tricks
 
 Hope you will enjoy !
