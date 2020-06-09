@@ -190,6 +190,7 @@ namespace framework
 			void insertEnd(UnderLyingType *node)
 			{
 				Y_ASSERT(node != nullptr);
+				Y_ASSERT(!contain(node));
 				DualLinkNode<UnderLyingType, List> *newNode = static_cast<DualLinkNode<UnderLyingType, List> *>(node);
 				newNode->m_next = nullptr;
 				newNode->m_previous = nullptr;
@@ -248,6 +249,7 @@ namespace framework
 					}
 					return false;
 				}
+				return true;
 			}
 			
 			
