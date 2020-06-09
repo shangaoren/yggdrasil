@@ -28,21 +28,22 @@ Software without prior written authorization from Florian GERARD
 
 #pragma once
 
-#include <array>
-#include "Task.hpp"
-#include "ServiceCall.hpp"
 #include "Event.hpp"
-#include "Mutex.hpp"
 #include "Hooks.hpp"
+#include "Mutex.hpp"
+#include "ServiceCall.hpp"
+#include "Task.hpp"
+#include <array>
 
+#include "yggdrasil/framework/Assertion.hpp"
+#include "yggdrasil/framework/DualLinkedList.hpp"
 #include "yggdrasil/interfaces/IVectorsManager.hpp"
 #include "yggdrasil/interfaces/IWaitable.hpp"
-#include "yggdrasil/kernel/Core.hpp"
-#include "yggdrasil/framework/DualLinkedList.hpp"
-#include "yggdrasil/framework/Assertion.hpp"
-#include "yggdrasil/systemView/SystemView.hpp"
 
-
+namespace core
+{
+	class Core;
+}
 namespace kernel
 {
 	using namespace core::interfaces;
@@ -54,6 +55,7 @@ namespace kernel
 		friend class Task;
 		friend class Mutex;
 		friend class Event;
+		friend class ::core::Core;
 
 	  private:
 		enum class changeTaskTrigger : uint32_t
@@ -71,7 +73,7 @@ namespace kernel
 			none = 20,
 		};
 
-		static void setupKernel(Core &systemCore, uint8_t systemPriority);
+		static void setupKernel(uint8_t systemPriority);
 
 		static bool startKernel();
 
@@ -82,7 +84,6 @@ namespace kernel
 		/*****************************************************DATA*****************************************************/
 
 		/* Interrupts Variables */
-		static Core *s_core;
 		static uint8_t s_systemPriority;
 		static bool s_interruptInstalled;
 
@@ -97,43 +98,27 @@ namespace kernel
 		static Task *volatile s_activeTask;
 		static Task *volatile s_taskToStack;
 		static volatile bool scheduled;
-		static volatile uint8_t s_lockLevel;
+		static volatile uint8_t s_lockLevel; // store the level of lock before critical section enters
+		static volatile bool s_isKernelLocked; // indicates if the kernel is in a critical section mode 
 		static uint32_t s_sysTickFreq;
 
 		/* Scheduler misc */
 		static bool s_schedulerStarted;
 		volatile static uint64_t s_ticks;
-		static TaskWithStack<256> s_idle;
 
-			/****************************************************FUNCTIONS*************************************************/
+		/****************************************************FUNCTIONS*************************************************/
 
-			//register an Irq, only accessed via service call
-		static inline bool IrqRegister(IVectorManager::Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char* name)
-		{
-			s_core->vectorManager().registerHandler(irq, handler, name);
-			return true;
-		}
-		
-		
+		//register an Irq, only accessed via service call
+		static bool IrqRegister(Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char *name);
+
 		//unregister an Irq, only accessed via service call
-		static inline bool IrqUnregister(IVectorManager::Irq irq)
-		{
-			s_core->vectorManager().unregisterHandler(irq);
-			return true;
-		}
-		
-		
+		static bool IrqUnregister(Irq irq);
+
 		/*Lock all interrupt lower or equal of system*/
-		static inline uint8_t enterKernelCriticalSection()
-		{
-			return s_core->vectorManager().lockInterruptsHigherThan(s_systemPriority+1);
-		}
-		
+		static void enterKernelCriticalSection();
+
 		/*release Interrupt lock*/
-		static inline void exitKernelCriticalSection(uint8_t level)
-		{
-			s_core->vectorManager().unlockInterruptsHigherThan(level);
-		}
+		static void exitKernelCriticalSection();
 
 		//start a task
 		static bool startTask(Task &task);
@@ -149,20 +134,22 @@ namespace kernel
 		static bool stopTask(Task &task);
 		//function to sleep a task for a number of ms
 		static bool sleep(uint32_t ms);
-		static volatile uint32_t* changeTask(uint32_t *stackPosition);
+		static volatile uint32_t *taskSwitch(uint32_t *stackPosition);
 		//set pendSv, trigger context switch
 		static void setPendSv(changeTaskTrigger trigger);
 		static void checkStack();
 
-		static void stopWait(interfaces::IWaitable* waitable);
+		static void stopWait(interfaces::IWaitable *waitable);
 		static void wait(interfaces::IWaitable *waitable);
 		//systick handler
-		static void systickHandler();
+		static void systemTimerTick();
 		static void svcBootstrap();
 		//Svc handler, redirect svc call to the right function
-		static void svcHandler(uint32_t *args);
+		static void supervisorCall(ServiceCall::SvcNumber t_service, uint32_t *t_args);
+
+	  private:
 		//Function of Idle Task (NOP when NDEBUG is defined, WFI when release)
 		static void idleTaskFunction(uint32_t);
 		static uint64_t getTicks();
 	};
-	}
+} // namespace kernel

@@ -226,6 +226,7 @@ namespace framework
 					if (m_first != nullptr)
 						m_first->m_previous = nullptr;
 					m_count--;
+					return true;
 				}
 				else
 				{

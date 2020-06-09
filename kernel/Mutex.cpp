@@ -29,10 +29,26 @@ Software without prior written authorization from Florian GERARD
 #include "Mutex.hpp"
 #include "Hooks.hpp"
 #include "Scheduler.hpp"
+#include "core/Core.hpp"
 
 
 namespace kernel
 {
+	
+	int16_t Mutex::lock(uint32_t timeout)
+	{
+		return supervisorCallLockMutex(this, timeout);
+	}
+	
+	bool Mutex::release()
+	{
+		return supervisorCallReleaseMutex(this);
+	}
+	
+	bool Mutex::isLocked()
+	{
+		return m_owner != nullptr;
+	}
 	
 	// A task want to get a mutex wait for it if already lock by someone else or get it if free
 	int16_t Mutex::kernelLockMutex(Mutex* mutex, uint32_t duration)
@@ -115,5 +131,8 @@ namespace kernel
 		Hooks::onTaskReady(task);
 		Scheduler::schedule(kernel::Scheduler::changeTaskTrigger::mutexTimeout);	
 	}
+	
+	Mutex::SupervisorCallLockMutex Mutex::supervisorCallLockMutex  = core::Core::supervisorCall < ServiceCall::SvcNumber::mutexLock, int16_t, Mutex*, uint32_t>;
+	Mutex::SupervisorCallReleaseMutex Mutex::supervisorCallReleaseMutex = core::Core::supervisorCall < ServiceCall::SvcNumber::mutexRelease, bool, Mutex*>;
 
 }// End namespace kernel

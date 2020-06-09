@@ -31,8 +31,6 @@ Software without prior written authorization from Florian GERARD
 
 #include <cstdint>
 
-#define svc(code) asm volatile("SVC %[immediate]"::[immediate] "I" (code))
-
 namespace kernel
 {
 	class ServiceCall

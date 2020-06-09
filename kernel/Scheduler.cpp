@@ -27,22 +27,19 @@ Software without prior written authorization from Florian GERARD
 */
 
 #include "Scheduler.hpp"
-
+#include "core/Core.hpp"
 
 namespace kernel
 {
-	Core* Scheduler::s_core;
-
-
 	bool Scheduler::s_schedulerStarted = false;
 	bool Scheduler::s_interruptInstalled = false;
 	volatile uint64_t Scheduler::s_ticks = 0;
 	volatile Scheduler::changeTaskTrigger Scheduler::s_trigger = Scheduler::changeTaskTrigger::none;
-		
-	Task* volatile Scheduler::s_activeTask = nullptr;
-	Task* volatile Scheduler::s_taskToStack = nullptr;
+	Task *volatile Scheduler::s_activeTask = nullptr;
+	Task *volatile Scheduler::s_taskToStack = nullptr;
 	volatile bool Scheduler::scheduled = false;
 	volatile uint8_t Scheduler::s_lockLevel = 0;
+	volatile bool Scheduler::s_isKernelLocked = false;
 	uint32_t Scheduler::s_sysTickFreq = 1000;
 	uint8_t Scheduler::s_systemPriority = 0;
 
@@ -50,18 +47,15 @@ namespace kernel
 	ReadyList Scheduler::s_ready;
 	SleepingList Scheduler::s_sleeping;
 	WaitableList Scheduler::s_waiting;
-	TaskWithStack<256> Scheduler::s_idle = TaskWithStack<256>(idleTaskFunction, 0, 0,"Idle");
-	
-	
+
 	/*-------------------------------------------------------------------------------------------*/
 	/*                                                                                           */
 	/*                                     PUBLIC FONCTION                                       */
 	/*                                                                                           */
 	/*-------------------------------------------------------------------------------------------*/
 
-	void Scheduler::setupKernel(Core &systemCore, uint8_t systemPriority)
+	void Scheduler::setupKernel(uint8_t systemPriority)
 	{
-		s_core = &systemCore;
 		s_systemPriority = systemPriority;
 		Y_ASSERT(s_systemPriority != 0); // Priority should be > 0
 	}
@@ -72,40 +66,39 @@ namespace kernel
 			return false;
 		if (s_ready.isEmpty()) //No Task in task list, cannot start Scheduler
 			return false;
-		s_idle.start(); //Add idle task
+
+		core::Core::idleTask.start(); // Add idle task
 		if (!installKernelInterrupt())
 			return false;
 		//Init Systick
-		s_core->systemTimer().initSystemTimer(s_core->coreClocks().getSystemCoreFrequency(), 1000);
-		s_core->systemTimer().startSystemTimer();
+		core::Core::systemTimer.initSystemTimer(core::Core::coreClocks.getSystemCoreFrequency(), s_sysTickFreq);
+		core::Core::systemTimer.startSystemTimer();
 		Hooks::onKernelStart();
-		svc(ServiceCall::SvcNumber::startFirstTask); //Switch to service call to start the first task
-		__BKPT(0);									 //shouldn't end here
-		return true;
+		core::Core::supervisorCall<ServiceCall::SvcNumber::startFirstTask, void>();
+		return false; //shouldn't end here
 	}
 
 	bool Scheduler::installKernelInterrupt()
 	{
 		if (s_interruptInstalled)
 			return true;
-		Y_ASSERT(s_core != nullptr);
 		// Install vector manager if not already done
-		if (!s_core->vectorManager().isInstalled())
+		if (!core::Core::vectorManager.isInstalled())
 		{
-			if (!s_core->vectorManager().installVectorManager())
+			if (!core::Core::vectorManager.installVectorManager())
 				return false;
 		}
 		//Setup Systick
-		s_core->vectorManager().irqPriority(s_core->systemTimer().getIrq(), s_systemPriority);
-		s_core->vectorManager().registerHandler(s_core->systemTimer().getIrq(), systickHandler, "I#15=Systick");
+		core::Core::vectorManager.irqPriority(core::Core::systemTimer.getIrq(), s_systemPriority);
+		core::Core::vectorManager.registerHandler(core::Core::systemTimer.getIrq(), core::Core::systemTimerHandler);
 
-		//Setup Service Call interrupt
-		s_core->vectorManager().irqPriority(SVCall_IRQn, s_systemPriority);
-		s_core->vectorManager().registerHandler(SVCall_IRQn, asmSvcHandler, "I#11=ServiceCall");
+		//Setup Supervisor Call interrupt
+		core::Core::vectorManager.irqPriority(core::Core::supervisorIrqNumber, s_systemPriority);
+		core::Core::vectorManager.registerHandler(core::Core::supervisorIrqNumber, core::Core::supervisorCallHandler);
 
 		//Setup pendSV interrupt (used for task change)
-		s_core->vectorManager().irqPriority(PendSV_IRQn, 0xFF); //Minimum priority for pendsv (task change)
-		s_core->vectorManager().registerHandler(PendSV_IRQn, asmPendSv, "I#14=PendSV");
+		core::Core::vectorManager.irqPriority(core::Core::taskSwitchIrqNumber, 0xFF); //Minimum priority for task change
+		core::Core::vectorManager.registerHandler(core::Core::taskSwitchIrqNumber, core::Core::contextSwitchHandler);
 		s_interruptInstalled = true;
 		return true;
 	}
@@ -116,18 +109,7 @@ namespace kernel
 		s_activeTask = s_ready.getFirst();
 		Hooks::onTaskStartExec(s_activeTask);
 		s_schedulerStarted = true;
-		asm volatile(
-			"MOV R0,%0\n\t"			 //load stack pointer from task.stackPointer
-			"LDMIA R0!,{R2-R11}\n\t" //restore registers R4 to R11
-			"MOV LR,R2\n\t"			 //reload Link register
-			"MSR CONTROL,R3\n\t"	 //reload CONTROL register
-			"TST LR, #0x10\n\t"		 // test Bit 4 to know if FPU has to be restored, unstack if 0
-			"IT EQ\n\t"
-			"VLDMIAEQ R0!,{S16-S31}\n\t" //restore floating point registers
-			"MSR PSP,R0\n\t"			 //reload process stack pointer with task's stack pointer
-			"ISB\n\t"					 //Instruction synchronisation Barrier is recommended after changing CONTROL
-			"BX LR" ::"r"(Scheduler::s_activeTask->m_stackPointer));
-
+		core::Core::restoreTask(Scheduler::s_activeTask->m_stackPointer);
 		return true; //should never return here
 	}
 
@@ -136,6 +118,38 @@ namespace kernel
 	/*                                    PRIVATE FONCTIONS                                      */
 	/*                                                                                           */
 	/*-------------------------------------------------------------------------------------------*/
+
+	inline bool Scheduler::IrqRegister(Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char *name)
+	{
+		core::Core::vectorManager.registerHandler(irq, handler, name);
+		return true;
+	}
+
+	inline bool Scheduler::IrqUnregister(Irq irq)
+	{
+		core::Core::vectorManager.unregisterHandler(irq);
+		return true;
+	}
+
+	inline void Scheduler::enterKernelCriticalSection()
+	{
+		Y_ASSERT(s_isKernelLocked == false);
+		if (s_isKernelLocked == false)
+		{
+			s_lockLevel = core::Core::vectorManager.lockInterruptsHigherThan(s_systemPriority + 1);
+			s_isKernelLocked = true;
+		}
+	}
+
+	inline void Scheduler::exitKernelCriticalSection()
+	{
+		Y_ASSERT(s_isKernelLocked == true);
+		if (s_isKernelLocked == true)
+		{
+			core::Core::vectorManager.unlockInterruptsHigherThan(s_lockLevel);
+			s_isKernelLocked = false;
+		}
+	}
 
 	bool Scheduler::startTask(Task &task)
 	{
@@ -165,7 +179,7 @@ namespace kernel
 				s_ready.insert(s_activeTask, Task::priorityCompare);
 				Hooks::onTaskStopExec(s_activeTask);
 				Hooks::onTaskReady(s_activeTask);
-				if(s_taskToStack == nullptr)
+				if (s_taskToStack == nullptr)
 					s_taskToStack = s_activeTask;
 				s_activeTask = nullptr;
 				//If there is no task to be saved already, put active task in s_previousTask to save context
@@ -194,14 +208,7 @@ namespace kernel
 		if (s_activeTask == &task)
 		{
 			s_activeTask = s_ready.getFirst();
-			asm volatile(
-				"MOV R0,%0\n\t"			 //load stack pointer from task.stackPointer
-				"LDMIA R0!,{R2-R11}\n\t" //restore registers R4 to R11
-				"MOV LR,R2\n\t"			 //reload Link register
-				"MSR CONTROL,R3\n\t"	 //reload CONTROL register
-				"ISB\n\t"				 //Instruction synchronisation Barrier is recommended after changing CONTROL
-				"MSR PSP,R0\n\t"		 //reload process stack pointer with task's stack pointer
-				"BX LR" ::"r"(s_activeTask->m_stackPointer));
+			core::Core::restoreTask(s_activeTask->m_stackPointer);
 		}
 		return true;
 	}
@@ -220,14 +227,19 @@ namespace kernel
 		s_taskToStack->m_state = Task::state::sleeping;
 		Hooks::onTaskSleep(s_taskToStack, ms);
 		s_activeTask = s_ready.getFirst();
-		Y_ASSERT(s_activeTask != nullptr); // ready list should at least contain idle task
+		Y_ASSERT(s_activeTask != nullptr);							 // ready list should at least contain idle task
 		setPendSv(kernel::Scheduler::changeTaskTrigger::enterSleep); //active task is sleeping, trigger context switch
 		return true;
 	}
 
-	volatile uint32_t *__attribute__((optimize("O0"))) Scheduler::changeTask(uint32_t *stackPosition)
+	void Scheduler::setPendSv(changeTaskTrigger trigger)
 	{
-		__DSB();
+		s_trigger = trigger;
+		core::Core::contextSwitchTrigger();
+	}
+
+	volatile uint32_t *__attribute__((optimize("O0"))) Scheduler::taskSwitch(uint32_t *stackPosition)
+	{
 		if (s_trigger != kernel::Scheduler::changeTaskTrigger::none) // avoid Spurious interrupt
 		{
 			Y_ASSERT(s_activeTask != nullptr);
@@ -248,31 +260,7 @@ namespace kernel
 		return s_activeTask->m_stackPointer;
 	}
 
-	void Scheduler::checkStack()
-	{
-		uint32_t *stackPosition;
-		asm volatile(
-			"MRS R0, PSP\n\t" //store Process Stack pointer into R0
-			"MOV %0,R0"		  //store stack pointer in task.stackPointer
-			: "=r"(stackPosition));
-		if (stackPosition == (nullptr))
-			return;
-		if (s_activeTask == nullptr)
-			__BKPT(0);
-		if ((stackPosition < (s_activeTask->m_stackOrigin)) || stackPosition > (&s_activeTask->m_stackOrigin[s_activeTask->m_stackSize - 1]))
-		{
-			__BKPT(0);
-		}
-	}
-
-	void Scheduler::setPendSv(changeTaskTrigger trigger)
-	{
-		s_trigger = trigger;
-		SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
-		__ISB();
-	}
-
-	void Scheduler::systickHandler()
+	void Scheduler::systemTimerTick()
 	{
 		bool needSchedule = false;
 		s_ticks++;
@@ -297,78 +285,75 @@ namespace kernel
 			schedule(kernel::Scheduler::changeTaskTrigger::exitSleep);
 	}
 
-	void __attribute__((aligned(4))) Scheduler::svcHandler(uint32_t *args)
+	void Scheduler::supervisorCall(ServiceCall::SvcNumber t_service, uint32_t *t_args)
 	{
-		ServiceCall::SvcNumber askedService;
-		uint32_t param0 = args[0], param1 = args[1], param2 = args[2];
-		askedService = (reinterpret_cast<ServiceCall::SvcNumber *>(args[6]))[-2]; //get stacked PC, then -2 to get SVC instruction
-
-		switch (askedService)
+		uint32_t param0 = t_args[0], param1 = t_args[1], param2 = t_args[2];
+		switch (t_service)
 		{
 		case ServiceCall::SvcNumber::startFirstTask:
-			args[0] = startFirstTask(); //write result to stacked R0
+			t_args[0] = startFirstTask(); //write result to stacked R0
 			break;
 
 		case ServiceCall::SvcNumber::registerIrq:
-			args[0] = IrqRegister(static_cast<IVectorManager::Irq>(param0), reinterpret_cast<core::interfaces::IVectorManager::IrqHandler>(param1), reinterpret_cast<const char *>(param2));
+			t_args[0] = IrqRegister(static_cast<Irq>(param0), reinterpret_cast<core::interfaces::IVectorManager::IrqHandler>(param1), reinterpret_cast<const char *>(param2));
 			break;
 
 		case ServiceCall::SvcNumber::unregisterIrq:
-			args[0] = IrqUnregister(static_cast<IVectorManager::Irq>(param0)); //execute function and write result to stacked R0
+			t_args[0] = IrqUnregister(static_cast<Irq>(param0)); //execute function and write result to stacked R0
 			break;
 
 		case ServiceCall::SvcNumber::startTask:
-			args[0] = startTask(*(reinterpret_cast<Task *>(param0)));
+			t_args[0] = startTask(*(reinterpret_cast<Task *>(param0)));
 			break;
 
 		case ServiceCall::SvcNumber::stopTask:
-			args[0] = stopTask(*(reinterpret_cast<Task *>(param0)));
+			t_args[0] = stopTask(*(reinterpret_cast<Task *>(param0)));
 			break;
 
 		case ServiceCall::SvcNumber::sleepTask:
-			args[0] = sleep(param0);
+			t_args[0] = sleep(param0);
 			break;
 
 		case ServiceCall::SvcNumber::signalEvent:
-			args[0] = Event::kernelSignalEvent(reinterpret_cast<Event *>(param0));
+			t_args[0] = Event::kernelSignalEvent(reinterpret_cast<Event *>(param0));
 			break;
 
 		case ServiceCall::SvcNumber::waitEvent:
-			args[0] = Event::kernelWaitEvent(reinterpret_cast<Event *>(param0), param1);
+			t_args[0] = Event::kernelWaitEvent(reinterpret_cast<Event *>(param0), param1);
 			break;
 
 		case ServiceCall::SvcNumber::enableIrq:
-			s_core->vectorManager().enableIrq(static_cast<IVectorManager::Irq>(param0));
+			core::Core::vectorManager.enableIrq(static_cast<Irq>(param0));
 			break;
 
 		case ServiceCall::SvcNumber::disableIrq:
-			s_core->vectorManager().disableIrq(static_cast<IVectorManager::Irq>(param0));
+			core::Core::vectorManager.disableIrq(static_cast<Irq>(param0));
 			break;
 
 		case ServiceCall::SvcNumber::clearIrq:
-			s_core->vectorManager().clearIrq(static_cast<IVectorManager::Irq>(param0));
+			core::Core::vectorManager.clearIrq(static_cast<Irq>(param0));
 			break;
 
 		case ServiceCall::SvcNumber::setGlobalPriority:
-			s_core->vectorManager().irqPriority(static_cast<IVectorManager::Irq>(param0), static_cast<uint8_t>(param1));
+			core::Core::vectorManager.irqPriority(static_cast<Irq>(param0), static_cast<uint8_t>(param1));
 			break;
 
 		case ServiceCall::SvcNumber::setPriority:
-			s_core->vectorManager().irqPriority(static_cast<IVectorManager::Irq>(param0), static_cast<uint8_t>(param1), static_cast<uint8_t>(param2));
+			core::Core::vectorManager.irqPriority(static_cast<Irq>(param0), static_cast<uint8_t>(param1), static_cast<uint8_t>(param2));
 			break;
 		case ServiceCall::SvcNumber::enterCriticalSection:
-			args[0] = s_core->vectorManager().lockInterruptsHigherThan(s_systemPriority - 2);
+			enterKernelCriticalSection();
 			break;
 
 		case ServiceCall::SvcNumber::exitCriticalSection:
-			s_core->vectorManager().unlockInterruptsHigherThan(args[0]); //set basepri to 0 in order to enable all interrupts
+			exitKernelCriticalSection(); //set basepri to 0 in order to enable all interrupts
 			break;
 
 		case kernel::ServiceCall::SvcNumber::mutexLock:
-			args[0] = Mutex::kernelLockMutex(reinterpret_cast<Mutex *>(param0), param1);
+			t_args[0] = Mutex::kernelLockMutex(reinterpret_cast<Mutex *>(param0), param1);
 			break;
 		case kernel::ServiceCall::SvcNumber::mutexRelease:
-			args[0] = Mutex::kernelReleaseMutex(reinterpret_cast<Mutex *>(param0));
+			t_args[0] = Mutex::kernelReleaseMutex(reinterpret_cast<Mutex *>(param0));
 			break;
 
 		default: //unknown Service call number
@@ -381,64 +366,4 @@ namespace kernel
 	{
 		return s_ticks;
 	}
-
-	void Scheduler::idleTaskFunction(uint32_t param)
-	{
-		do
-		{
-#ifdef NDEBUG
-			__NOP();
-#else
-			__WFI();
-#endif
-		} while (true);
-	}
-
-	extern "C" 
-	{
-	void __attribute__((naked, Optimize("O0"))) Scheduler::asmPendSv()
-	{
-		asm volatile(
-			"CPSID I\n\t"
-			"DSB\n\t"
-			"MRS R0, PSP\n\t"				   //store Process Stack pointer into R0
-			"TST LR, #0x10\n\t"				   // test Bit 4 of Link return to know if floating point was used , if 0 save FP
-			"IT EQ\n\t"
-			"VSTMDBEQ R0!, {S16-S31}\n\t" // save floating point registers
-			"MOV R2,LR\n\t"				  //store Link Register into R2
-			"MRS R3,CONTROL\n\t"		  //store CONTROL register into R3
-			"STMDB R0!,{R2-R11}\n\t"	  //store R2 to R11 memory pointed by R0 (stack), increment memory and rewrite the new adress to R0
-			"bl %[changeTask]\n\t"			// go to change task
-			"LDMIA R0!,{R2-R11}\n\t"	  //restore registers R4 to R11 (R0 was loaded by change task with the new stackpointer
-			"MOV LR,R2\n\t"				  //reload Link register
-			"MSR CONTROL,R3\n\t"		  //reload CONTROL register
-			"ISB\n\t"					  //Instruction synchronisation Barrier is recommended after changing CONTROL
-			"TST LR, #0x10\n\t"			  // test Bit 4 to know if FPU has to be restored, unstack if 0
-			"IT EQ\n\t"
-			"VLDMIAEQ R0!,{S16-S31}\n\t" //restore floating point registers
-			"MSR PSP,R0\n\t"			 //reload process stack pointer with task's stack pointer
-			"CPSIE I\n\t" //unlock Interrupts
-			"ISB \n\t"
-			"BX LR"
-				: // no outputs
-			: [changeTask]"g"(Scheduler::changeTask)
-				: "memory");
-	}
-
-	void __attribute__((naked, Optimize("O0"))) Scheduler::asmSvcHandler()
-	{
-		asm volatile(
-			"TST LR,#4\n\t"		//test bit 2 of EXC_RETURN to know if MSP or PSP
-			"ITE EQ\n\t"		//was used for stacking
-			"MRSEQ R0, MSP\n\t" //place msp or psp in R0 as parameter for SvcHandler
-			"MRSNE R0, PSP\n\t"
-			"PUSH {LR}\n\t" //stack LR to be able to return for exception
-			"bl %[svc]\n\t"
-			"POP {LR}\n\t"
-			"BX LR"
-			: // no outputs
-			: [svc] "g"(Scheduler::svcHandler):);
-	}
-	}
-
-}	//End namespace kernel
+} //End namespace kernel

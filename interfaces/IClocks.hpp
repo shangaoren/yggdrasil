@@ -39,7 +39,7 @@ namespace core
 		{
 		public:
 			virtual uint32_t getSystemCoreFrequency() = 0;
-			virtual bool initSystemClock() = 0;
+			virtual bool init() = 0;
 			virtual uint32_t getClockFrequency(uint32_t clockID) = 0;
 			
 		}; //End namespace IClocks

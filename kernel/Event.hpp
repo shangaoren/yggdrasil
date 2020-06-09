@@ -35,7 +35,6 @@ Software without prior written authorization from Florian GERARD
 #include "yggdrasil/interfaces/IWaitable.hpp"
 
 
-
 namespace kernel
 {
 	
@@ -64,38 +63,19 @@ namespace kernel
 		//@parameter Task waiting for the event
 		//return true if the task is waiting,
 		//false if event is already rised
-		virtual inline int16_t wait(uint32_t duration = 0)
-		{
-			return serviceCallEventWait(this, duration);
-		}
+		int16_t wait(uint32_t duration = 0);
 		
 		
 		//Signal that an event occured
 		//if a task is already waiting then return it to wake it up
 		//else rise event and return nullptr
-		virtual inline bool signal()
-		{
-			serviceCallEventSignal(this);
-			return true;
-		}
+		bool signal();
 		
-		virtual bool someoneWaiting()
-		{
-			if (m_waiter != nullptr)
-				return true;
-			else
-				return false;
-		}
+		bool someoneWaiting();
 
-		virtual bool isAlreadyUp()
-		{
-			return m_isRaised;
-		}
+		bool isAlreadyUp();
 
-		virtual void reset()
-		{
-			m_isRaised = false;
-		}
+		void reset();
 
 		void stopWait(Task* task) final;
 		void onTimeout(Task* task) final;
@@ -108,25 +88,12 @@ namespace kernel
 		const char *m_name;
 
 		//------------------PRIVATE FUNCTIONS---------------------
-		static int16_t __attribute__((naked, optimize("O0"))) serviceCallEventWait(Event* event, uint32_t duration)
-		{
-			asm volatile("PUSH {LR}\n\t"
-						"DSB \n\t"
-						 "SVC %[immediate]\n\t"
-						 "POP {LR}\n\t"
-						 "BX LR" ::[immediate] "I"(ServiceCall::SvcNumber::waitEvent));
-		}
 		
-		static bool __attribute__((naked, optimize("O0"))) serviceCallEventSignal(Event* event)
-		{
-			asm volatile("PUSH {LR}\n\t"
-						 "DSB \n\t"
-						 "SVC %[immediate]\n\t"
-						 "POP {LR}\n\t"
-						 "BX LR"::[immediate] "I"(ServiceCall::SvcNumber::signalEvent)	);
-		}
+		using SupervisorEventWait = int16_t(&)(Event*, uint32_t);
+		static SupervisorEventWait& serviceCallEventWait;
 		
-		//------------------PRIVATE KERNEL FUNCTIONS---------------------
+		using SupervisorEventSignal = bool(&)(Event*);
+		static SupervisorEventSignal& serviceCallEventSignal;
 	
 		};
 	

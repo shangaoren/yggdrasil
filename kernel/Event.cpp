@@ -28,6 +28,7 @@ Software without prior written authorization from Florian GERARD
 
 #include "Event.hpp"
 #include "Scheduler.hpp"
+#include "core/Core.hpp"
 
 namespace kernel
 {
@@ -86,6 +87,35 @@ namespace kernel
 			return 1;
 		}		
 	}
+	
+	int16_t Event::wait(uint32_t duration)
+	{
+		return serviceCallEventWait(this, duration);
+	}
+	
+	bool Event::signal()
+	{
+		serviceCallEventSignal(this);
+		return true;
+	}
+		
+	bool Event::someoneWaiting()
+	{
+		if (m_waiter != nullptr)
+			return true;
+		else
+			return false;
+	}
+	
+	void Event::reset()
+	{
+		m_isRaised = false;
+	}
+	
+	bool Event::isAlreadyUp()
+	{
+		return m_isRaised;
+	}
 
 	void Event::stopWait(Task* task)
 	{
@@ -109,4 +139,8 @@ namespace kernel
 		Hooks::onTaskReady(task);
 		Scheduler::schedule(kernel::Scheduler::changeTaskTrigger::wakeByEvent);
 	}
+	
+	Event::SupervisorEventWait Event::serviceCallEventWait = core::Core::supervisorCall<ServiceCall::SvcNumber::waitEvent, int16_t, Event*, uint32_t>;
+	Event::SupervisorEventSignal Event::serviceCallEventSignal = core::Core::supervisorCall<ServiceCall::SvcNumber::signalEvent, bool, Event*>;
+	
 }// End namespace kernel

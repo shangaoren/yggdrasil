@@ -32,6 +32,7 @@ Software without prior written authorization from Florian GERARD
 #include "ServiceCall.hpp"
 #include "yggdrasil/interfaces/IWaitable.hpp"
 
+
 namespace kernel
 {
 	
@@ -48,20 +49,11 @@ namespace kernel
 		/* try to lock ressource, 
 		 * -timeout specify a time in ms to wait for ressoure, 0 for no timeout 
 		 * return 1 if wait success, 0 if unable to wait, -1 if timeout*/	
-		int16_t lock(uint32_t timeout = 0)
-		{
-			return serviceCallLockMutex(this, timeout);
-		}
+		int16_t lock(uint32_t timeout = 0);
 		
-		bool release()
-		{
-			return serviceCallReleaseMutex(this);
-		}
+		bool release();
 		
-		bool isLocked()
-		{
-			return m_owner != nullptr;
-		}
+		bool isLocked();
 		
 	private:
 		EventList m_waiting;
@@ -71,24 +63,18 @@ namespace kernel
 		static bool kernelReleaseMutex(Mutex* mutex);
 		void stopWait(Task *task);
 		void onTimeout(Task* task);
-
-		static int16_t __attribute__((naked, optimize("O0"))) serviceCallLockMutex(Mutex* self, uint32_t timeout)
-		{
-			asm volatile("PUSH {LR}");
-			svc(ServiceCall::SvcNumber::mutexLock);
-			asm volatile(
-				"POP {LR}\n\t"
-				"BX LR");
-		}
 		
-		static bool __attribute__((naked, optimize("O0"))) serviceCallReleaseMutex(Mutex* self)
-		{
-			asm volatile("PUSH {LR}");
-			svc(ServiceCall::SvcNumber::mutexRelease);
-			asm volatile(
-				"POP {LR}\n\t"
-				"BX LR");
-		}
+		// call kernel to lock mutex
+		//@return int16_t, 1 if when succes, -1 if timeout, 0 if error
+		//@params pointer to mutex to lock, optional timeout (0 to disable)
+		using SupervisorCallLockMutex = int16_t(&)(Mutex*, uint32_t);
+		static SupervisorCallLockMutex& supervisorCallLockMutex;
+		
+		// call kernel to unlock mutex
+		//@return bool, true if success, false otherwise
+		//@params pointer to mutex to unlock
+		using SupervisorCallReleaseMutex = bool(&)(Mutex*);
+		static SupervisorCallReleaseMutex& supervisorCallReleaseMutex;
 	};
 	
 template<class ObjectType>

@@ -62,9 +62,10 @@ namespace kernel
 	public:
 	  
 	  using TaskFunc =  void (*)(uint32_t);
+		using StartTaskStub = bool(&)(Task*);
 
 	  virtual bool start();
-	  static bool startTaskStub(Task *task);
+		static StartTaskStub& startTaskStub;
 	  virtual bool stop();
 	  static void taskFinished();
 

@@ -28,9 +28,13 @@ Software without prior written authorization from Florian GERARD
 
 
 #include "Scheduler.hpp"
+#include "core/Core.hpp"
+
 
 namespace kernel
 {
+	
+		Task::StartTaskStub Task::startTaskStub = core::Core::supervisorCall<ServiceCall::SvcNumber::startTask, bool, Task*>;
 
 		bool Task::start()
 		{
@@ -41,20 +45,22 @@ namespace kernel
 
 		bool Task::stop()
 		{
-			__BKPT(0);
+			Hooks::onTaskClose(this);
 			return true;
 		}
 
 		void Task::taskFinished()
 		{
-			__BKPT(0);
+			//__BKPT(0);
 		}
 
-		bool __attribute__((naked)) Task::startTaskStub(Task* task)
-		{
-			asm volatile("PUSH {LR}");
-			svc(ServiceCall::SvcNumber::startTask);
-			asm volatile("POP {PC}");
-		}
+		//bool __attribute__((naked)) Task::startTaskStub(Task* task)
+		//{
+		//	asm volatile("PUSH {LR}");
+		//	svc(ServiceCall::SvcNumber::startTask);
+		//	asm volatile("POP {PC}");
+		//}
+	
+	
 
 }

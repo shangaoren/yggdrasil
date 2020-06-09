@@ -28,18 +28,39 @@ Software without prior written authorization from Florian GERARD
 #pragma once
 
 #include <cstdint>
-#include "yggdrasil/kernel/Processor.hpp"
 
 namespace core
 {
 	namespace interfaces
 	{
+		
+		class Irq
+		{
+		public:
+			constexpr Irq(int16_t number) : m_interruptNumber(number)
+			{
+			}
+			
+			/*constexpr operator IRQn_Type()
+			{
+				return static_cast<IRQn_Type>(static_cast<uint16_t>(m_interruptNumber));
+			}*/
+			
+			constexpr operator int16_t()
+			{
+				return m_interruptNumber;
+			}
+			
+		private:
+			const int16_t m_interruptNumber;
+		};
+		
 		class IVectorManager
 		{
 			
 		public:
-			typedef IRQn_Type Irq;
-			typedef void(*IrqHandler)(void);
+			//typedef IRQn_Type Irq;
+			using IrqHandler = void(*)();
 			
 		public:
 			virtual void registerHandler(Irq irq, IrqHandler handler, const char* name = nullptr) = 0;
