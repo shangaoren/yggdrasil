@@ -65,7 +65,11 @@ namespace kernel
 		
 		/*set a Task into sleep for an amount of ms
 		 *@Warning: do not call it if you're not in a Task*/
+<<<<<<< Updated upstream
 		const static inline auto& sleep = core::Core::supervisorCall < ServiceCall::SvcNumber::sleepTask, void, uint32_t>;
+=======
+		constexpr static auto& sleep = core::Core::supervisorCall < ServiceCall::SvcNumber::sleepTask, void, uint32_t>;
+>>>>>>> Stashed changes
 		
 		
 		/*get kernel timeStamp*/
@@ -149,35 +153,58 @@ namespace kernel
 		}
 		
 		/*Lock every interrupts below System*/
+<<<<<<< Updated upstream
 		static const inline auto& enterCriticalSection = core::Core::supervisorCall<ServiceCall::SvcNumber::enterCriticalSection, void>;
 		
 		/*Unlock Interrupts*/
 		static const inline auto& exitCriticalSection = core::Core::supervisorCall<ServiceCall::SvcNumber::exitCriticalSection, void>;		
+=======
+		static constexpr auto& enterCriticalSection = core::Core::supervisorCall<ServiceCall::SvcNumber::enterCriticalSection, void>;
+		
+		/*Unlock Interrupts*/
+		static constexpr auto& exitCriticalSection = core::Core::supervisorCall<ServiceCall::SvcNumber::exitCriticalSection, void>;
+>>>>>>> Stashed changes
 		
 
 	private:
 		/* Register an interrupt */
 		//@return true if success, false otherwise
 		//@params irq to register, irqHandler to use when irq is triggered, const char* name of irq
+<<<<<<< Updated upstream
 		static const inline auto& registerIrqKernel = 
+=======
+		static constexpr auto& registerIrqKernel =
+>>>>>>> Stashed changes
 			core::Core::supervisorCall<ServiceCall::SvcNumber::registerIrq, bool, core::interfaces::Irq, core::interfaces::IVectorManager::IrqHandler, const char*>;
 		
 		// unregister an irq (will replace by default handler), the irq should not be called again
 		//@return true if success, false otherwise
 		//@params irq to unregister
+<<<<<<< Updated upstream
 		static const inline auto& unRegisterIrqKernel = 
+=======
+		static constexpr auto& unRegisterIrqKernel =
+>>>>>>> Stashed changes
 			core::Core::supervisorCall < ServiceCall::SvcNumber::unregisterIrq, bool, core::interfaces::Irq>; 
 		
 		// set global irq Priority (ignore subpriority/ preempt splitting)
 		//@return no return
 		//@params irq to setup, priority to give
+<<<<<<< Updated upstream
 		static const inline auto& irqGlobalPriorityKernel = 
+=======
+		static constexpr auto& irqGlobalPriorityKernel =
+>>>>>>> Stashed changes
 			core::Core::supervisorCall < ServiceCall::SvcNumber::setGlobalPriority,void, core::interfaces::Irq, uint8_t>;
 		
 		// set irq Priority whith priority and subpriority
 		//@return no return
 		//@params irq to setup, preempt priority, sub priority
+<<<<<<< Updated upstream
 		static const inline auto& irqPriorityKernel = 
+=======
+		static constexpr auto& irqPriorityKernel =
+>>>>>>> Stashed changes
 			core::Core::supervisorCall < ServiceCall::SvcNumber::setPriority, void, core::interfaces::Irq, uint8_t, uint8_t>;
 	};
 	}
