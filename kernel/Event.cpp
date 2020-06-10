@@ -29,6 +29,7 @@ Software without prior written authorization from Florian GERARD
 #include "Event.hpp"
 #include "Scheduler.hpp"
 #include "core/Core.hpp"
+#include "Hooks.hpp"
 
 namespace kernel
 {
@@ -36,7 +37,7 @@ namespace kernel
 	bool Event::kernelSignalEvent(Event* event)
 	{
 		Y_ASSERT(event != nullptr);
-		Hooks::onEventTrigger(event);
+		kernel::Hooks::onEventTrigger(event);
 		if (event->m_waiter != nullptr)
 		{
 			Task* newReadyTask = event->m_waiter;
@@ -47,7 +48,7 @@ namespace kernel
 			Y_ASSERT(!Scheduler::s_waiting.contain(newReadyTask)); 
 			Scheduler::s_ready.insert(newReadyTask, Task::priorityCompare);
 			newReadyTask->m_state = kernel::Task::state::ready;
-			Hooks::onTaskReady(newReadyTask);
+			kernel::Hooks::onTaskReady(newReadyTask);
 			Scheduler::schedule(kernel::Scheduler::changeTaskTrigger::wakeByEvent);
 		}
 		else

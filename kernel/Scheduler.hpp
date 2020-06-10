@@ -29,7 +29,6 @@ Software without prior written authorization from Florian GERARD
 #pragma once
 
 #include "Event.hpp"
-#include "Hooks.hpp"
 #include "Mutex.hpp"
 #include "ServiceCall.hpp"
 #include "Task.hpp"

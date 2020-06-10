@@ -28,6 +28,7 @@ Software without prior written authorization from Florian GERARD
 
 #include "Scheduler.hpp"
 #include "core/Core.hpp"
+#include "Hooks.hpp"
 
 namespace kernel
 {
@@ -89,7 +90,6 @@ namespace kernel
 				return false;
 		}
 		//Setup Systick
-<<<<<<< Updated upstream
 		core::Core::vectorManager.irqPriority(core::Core::systemTimer.getIrq(), s_systemPriority);
 		core::Core::vectorManager.registerHandler(core::Core::systemTimer.getIrq(), core::Core::systemTimerHandler);
 
@@ -100,18 +100,7 @@ namespace kernel
 		//Setup pendSV interrupt (used for task change)
 		core::Core::vectorManager.irqPriority(core::Core::taskSwitchIrqNumber, 0xFF); //Minimum priority for task change
 		core::Core::vectorManager.registerHandler(core::Core::taskSwitchIrqNumber, core::Core::contextSwitchHandler);
-=======
-		core::Core::vectorManager.irqPriority(::core::Core::systemTimer.getIrq(), s_systemPriority);
-		core::Core::vectorManager.registerHandler(::core::Core::systemTimer.getIrq(), core::Core::systemTimerHandler);
 
-		//Setup Supervisor Call interrupt
-		core::Core::vectorManager.irqPriority(::core::Core::supervisorIrqNumber, s_systemPriority);
-		core::Core::vectorManager.registerHandler(::core::Core::supervisorIrqNumber, core::Core::supervisorCallHandler);
-
-		//Setup pendSV interrupt (used for task change)
-		core::Core::vectorManager.irqPriority(::core::Core::taskSwitchIrqNumber, 0xFF); //Minimum priority for task change
-		core::Core::vectorManager.registerHandler(::core::Core::taskSwitchIrqNumber, core::Core::contextSwitchHandler);
->>>>>>> Stashed changes
 		s_interruptInstalled = true;
 		return true;
 	}
@@ -379,8 +368,5 @@ namespace kernel
 	{
 		return s_ticks;
 	}
-<<<<<<< Updated upstream
 } //End namespace kernel
-=======
-} //End namespace kernel
->>>>>>> Stashed changes
+
