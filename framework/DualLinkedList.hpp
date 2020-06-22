@@ -30,6 +30,7 @@ Software without prior written authorization from Florian GERARD
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include "yggdrasil/framework/Assertion.hpp"
 
 
@@ -38,7 +39,7 @@ namespace framework
 	template<typename UnderLyingType, typename List>
 		class DualLinkNode
 		{
-			
+			friend class T;
 			template<typename T,typename L> friend class DualLinkedList;
 			
 		private:
@@ -316,6 +317,16 @@ namespace framework
 					i++;
 				}
 				return static_cast<UnderLyingType*>(ptr);
+			}
+
+			void foreach (std::function<void(UnderLyingType *)> t_function)
+			{
+				UnderLyingType *ptr = peekFirst();
+				while (ptr != nullptr)
+				{
+					t_function(ptr);
+					ptr = static_cast<UnderLyingType*>(ptr->m_next);
+				}
 			}
 
 			uint32_t count()
