@@ -38,6 +38,9 @@ Software without prior written authorization from Florian GERARD
 #include "yggdrasil/framework/DualLinkedList.hpp"
 #include "yggdrasil/interfaces/IVectorsManager.hpp"
 #include "yggdrasil/interfaces/IWaitable.hpp"
+#include "yggdrasil/framework/DualLinkedList.hpp"
+#include "yggdrasil/framework/Assertion.hpp"
+
 
 namespace core
 {
@@ -108,16 +111,18 @@ namespace kernel
 		/****************************************************FUNCTIONS*************************************************/
 
 		//register an Irq, only accessed via service call
-		static bool IrqRegister(Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char *name);
-
+		static bool IrqRegister(Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char* name);
+		
+		
 		//unregister an Irq, only accessed via service call
 		static bool IrqUnregister(Irq irq);
-
+		
+		
 		/*Lock all interrupt lower or equal of system*/
-		static void enterKernelCriticalSection();
-
+		static uint8_t enterKernelCriticalSection();
+		
 		/*release Interrupt lock*/
-		static void exitKernelCriticalSection();
+		static void exitKernelCriticalSection(uint8_t level);
 
 		//start a task
 		static bool startTask(Task &task);
@@ -133,7 +138,7 @@ namespace kernel
 		static bool stopTask(Task &task);
 		//function to sleep a task for a number of ms
 		static bool sleep(uint32_t ms);
-		static volatile uint32_t *taskSwitch(uint32_t *stackPosition);
+		static volatile uint32_t* taskSwitch(uint32_t *stackPosition);
 		//set pendSv, trigger context switch
 		static void setPendSv(changeTaskTrigger trigger);
 		static void checkStack();
@@ -146,7 +151,7 @@ namespace kernel
 		//Svc handler, redirect svc call to the right function
 		static void supervisorCall(ServiceCall::SvcNumber t_service, uint32_t *t_args);
 
-	  private:
+	private:
 		//Function of Idle Task (NOP when NDEBUG is defined, WFI when release)
 		static void idleTaskFunction(uint32_t);
 		static uint64_t getTicks();

@@ -29,7 +29,6 @@ Software without prior written authorization from Florian GERARD
 #include "Event.hpp"
 #include "Scheduler.hpp"
 #include "core/Core.hpp"
-#include "Hooks.hpp"
 
 namespace kernel
 {
@@ -143,5 +142,5 @@ namespace kernel
 	
 	Event::SupervisorEventWait Event::serviceCallEventWait = core::Core::supervisorCall<ServiceCall::SvcNumber::waitEvent, int16_t, Event*, uint32_t>;
 	Event::SupervisorEventSignal Event::serviceCallEventSignal = core::Core::supervisorCall<ServiceCall::SvcNumber::signalEvent, bool, Event*>;
-	
 }// End namespace kernel
+

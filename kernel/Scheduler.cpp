@@ -28,16 +28,16 @@ Software without prior written authorization from Florian GERARD
 
 #include "Scheduler.hpp"
 #include "core/Core.hpp"
-#include "Hooks.hpp"
 
 namespace kernel
 {
 	bool Scheduler::s_schedulerStarted = false;
 	bool Scheduler::s_interruptInstalled = false;
 	volatile uint64_t Scheduler::s_ticks = 0;
-	volatile Scheduler::changeTaskTrigger Scheduler::s_trigger = Scheduler::changeTaskTrigger::none;
-	Task *volatile Scheduler::s_activeTask = nullptr;
-	Task *volatile Scheduler::s_taskToStack = nullptr;
+	volatile Scheduler::changeTaskTrigger Scheduler::s_trigger = Scheduler::changeTaskTrigger::none;		
+	Task* volatile Scheduler::s_activeTask = nullptr;
+	Task* volatile Scheduler::s_taskToStack = nullptr;
+
 	volatile bool Scheduler::scheduled = false;
 	volatile uint8_t Scheduler::s_lockLevel = 0;
 	volatile bool Scheduler::s_isKernelLocked = false;
@@ -75,7 +75,7 @@ namespace kernel
 		core::Core::systemTimer.initSystemTimer(core::Core::coreClocks.getSystemCoreFrequency(), s_sysTickFreq);
 		core::Core::systemTimer.startSystemTimer();
 		Hooks::onKernelStart();
-		core::Core::supervisorCall<ServiceCall::SvcNumber::startFirstTask, void>();
+		core::Core::supervisorCall < ServiceCall::SvcNumber::startFirstTask, void>();		 
 		return false; //shouldn't end here
 	}
 
@@ -100,7 +100,6 @@ namespace kernel
 		//Setup pendSV interrupt (used for task change)
 		core::Core::vectorManager.irqPriority(core::Core::taskSwitchIrqNumber, 0xFF); //Minimum priority for task change
 		core::Core::vectorManager.registerHandler(core::Core::taskSwitchIrqNumber, core::Core::contextSwitchHandler);
-
 		s_interruptInstalled = true;
 		return true;
 	}
@@ -120,6 +119,29 @@ namespace kernel
 	/*                                    PRIVATE FONCTIONS                                      */
 	/*                                                                                           */
 	/*-------------------------------------------------------------------------------------------*/
+	
+	
+	inline bool Scheduler::IrqRegister(Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char* name)
+	{
+		core::Core::vectorManager.registerHandler(irq, handler, name);
+		return true;
+	}
+	
+	inline bool Scheduler::IrqUnregister(Irq irq)
+	{
+		core::Core::vectorManager.unregisterHandler(irq);
+		return true;
+	}
+	
+	inline uint8_t Scheduler::enterKernelCriticalSection()
+	{
+		return core::Core::vectorManager.lockInterruptsHigherThan(s_systemPriority);
+	}
+	
+	inline void exitKernelCriticalSection(uint8_t level)
+	{
+		core::Core::vectorManager.unlockInterruptsHigherThan(level);
+	}
 
 	inline bool Scheduler::IrqRegister(Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char *name)
 	{
@@ -233,12 +255,13 @@ namespace kernel
 		setPendSv(kernel::Scheduler::changeTaskTrigger::enterSleep); //active task is sleeping, trigger context switch
 		return true;
 	}
-
+	
 	void Scheduler::setPendSv(changeTaskTrigger trigger)
 	{
 		s_trigger = trigger;
 		core::Core::contextSwitchTrigger();
 	}
+	
 
 	volatile uint32_t *__attribute__((optimize("O0"))) Scheduler::taskSwitch(uint32_t *stackPosition)
 	{
@@ -319,6 +342,7 @@ namespace kernel
 		case ServiceCall::SvcNumber::signalEvent:
 			t_args[0] = Event::kernelSignalEvent(reinterpret_cast<Event *>(param0));
 			break;
+			
 
 		case ServiceCall::SvcNumber::waitEvent:
 			t_args[0] = Event::kernelWaitEvent(reinterpret_cast<Event *>(param0), param1);
@@ -344,11 +368,11 @@ namespace kernel
 			core::Core::vectorManager.irqPriority(static_cast<Irq>(param0), static_cast<uint8_t>(param1), static_cast<uint8_t>(param2));
 			break;
 		case ServiceCall::SvcNumber::enterCriticalSection:
-			enterKernelCriticalSection();
+			t_args[0] = core::Core::vectorManager.lockInterruptsHigherThan(s_systemPriority);
 			break;
 
 		case ServiceCall::SvcNumber::exitCriticalSection:
-			exitKernelCriticalSection(); //set basepri to 0 in order to enable all interrupts
+			core::Core::vectorManager.unlockInterruptsHigherThan(s_lockLevel); //set basepri to 0 in order to enable all interrupts
 			break;
 
 		case kernel::ServiceCall::SvcNumber::mutexLock:
@@ -368,5 +392,4 @@ namespace kernel
 	{
 		return s_ticks;
 	}
-} //End namespace kernel
-
+}	//End namespace kernel

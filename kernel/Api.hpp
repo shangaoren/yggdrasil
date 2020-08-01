@@ -149,7 +149,7 @@ namespace kernel
 		
 		/*Lock every interrupts below System*/
 		static const inline auto& enterCriticalSection = core::Core::supervisorCall<ServiceCall::SvcNumber::enterCriticalSection, void>;
-		
+	
 		/*Unlock Interrupts*/
 		static const inline auto& exitCriticalSection = core::Core::supervisorCall<ServiceCall::SvcNumber::exitCriticalSection, void>;		
 
@@ -159,22 +159,29 @@ namespace kernel
 		/* Register an interrupt */
 		//@return true if success, false otherwise
 		//@params irq to register, irqHandler to use when irq is triggered, const char* name of irq
-		static const inline auto& registerIrqKernel = core::Core::supervisorCall<ServiceCall::SvcNumber::registerIrq, bool, core::interfaces::Irq, core::interfaces::IVectorManager::IrqHandler, const char*>;
+
+		static const inline auto& registerIrqKernel = 
+			core::Core::supervisorCall<ServiceCall::SvcNumber::registerIrq, bool, core::interfaces::Irq, core::interfaces::IVectorManager::IrqHandler, const char*>;
 		
 		// unregister an irq (will replace by default handler), the irq should not be called again
 		//@return true if success, false otherwise
 		//@params irq to unregister
 
-		static const inline auto& unRegisterIrqKernel = core::Core::supervisorCall < ServiceCall::SvcNumber::unregisterIrq, bool, core::interfaces::Irq>;
-		
+		static const inline auto& unRegisterIrqKernel = 
+			core::Core::supervisorCall < ServiceCall::SvcNumber::unregisterIrq, bool, core::interfaces::Irq>; 
+
 		// set global irq Priority (ignore subpriority/ preempt splitting)
 		//@return no return
 		//@params irq to setup, priority to give
-		static const inline auto& irqGlobalPriorityKernel = core::Core::supervisorCall < ServiceCall::SvcNumber::setGlobalPriority,void, core::interfaces::Irq, uint8_t>;
+
+		static const inline auto& irqGlobalPriorityKernel = 
+			core::Core::supervisorCall < ServiceCall::SvcNumber::setGlobalPriority,void, core::interfaces::Irq, uint8_t>;
+
 		
 		// set irq Priority whith priority and subpriority
 		//@return no return
 		//@params irq to setup, preempt priority, sub priority
-		static const inline auto& irqPriorityKernel = core::Core::supervisorCall < ServiceCall::SvcNumber::setPriority, void, core::interfaces::Irq, uint8_t, uint8_t>;
+		static const inline auto& irqPriorityKernel = 
+			core::Core::supervisorCall < ServiceCall::SvcNumber::setPriority, void, core::interfaces::Irq, uint8_t, uint8_t>;
 	};
 	}
