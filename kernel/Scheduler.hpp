@@ -111,18 +111,18 @@ namespace kernel
 		/****************************************************FUNCTIONS*************************************************/
 
 		//register an Irq, only accessed via service call
-		static bool IrqRegister(Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char* name);
+		static bool irqRegister(Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char* name);
 		
 		
 		//unregister an Irq, only accessed via service call
-		static bool IrqUnregister(Irq irq);
+		static bool irqUnregister(Irq irq);
 		
 		
 		/*Lock all interrupt lower or equal of system*/
-		static uint8_t enterKernelCriticalSection();
+		static void enterKernelCriticalSection();
 		
 		/*release Interrupt lock*/
-		static void exitKernelCriticalSection(uint8_t level);
+		static void exitKernelCriticalSection();
 
 		//start a task
 		static bool startTask(Task &task);

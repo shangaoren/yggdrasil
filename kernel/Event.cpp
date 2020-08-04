@@ -29,6 +29,7 @@ Software without prior written authorization from Florian GERARD
 #include "Event.hpp"
 #include "Scheduler.hpp"
 #include "core/Core.hpp"
+#include "Hooks.hpp"
 
 namespace kernel
 {

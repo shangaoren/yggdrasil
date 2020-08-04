@@ -151,10 +151,7 @@ namespace kernel
 		static const inline auto& enterCriticalSection = core::Core::supervisorCall<ServiceCall::SvcNumber::enterCriticalSection, void>;
 	
 		/*Unlock Interrupts*/
-		static const inline auto& exitCriticalSection = core::Core::supervisorCall<ServiceCall::SvcNumber::exitCriticalSection, void>;		
-
-		
-
+		static const inline auto& exitCriticalSection = core::Core::supervisorCall<ServiceCall::SvcNumber::exitCriticalSection, void>;
 	private:
 		/* Register an interrupt */
 		//@return true if success, false otherwise

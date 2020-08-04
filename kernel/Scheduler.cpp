@@ -28,6 +28,7 @@ Software without prior written authorization from Florian GERARD
 
 #include "Scheduler.hpp"
 #include "core/Core.hpp"
+#include "Hooks.hpp"
 
 namespace kernel
 {
@@ -121,46 +122,24 @@ namespace kernel
 	/*-------------------------------------------------------------------------------------------*/
 	
 	
-	inline bool Scheduler::IrqRegister(Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char* name)
+	inline bool Scheduler::irqRegister(Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char* name)
 	{
 		core::Core::vectorManager.registerHandler(irq, handler, name);
 		return true;
 	}
 	
-	inline bool Scheduler::IrqUnregister(Irq irq)
+	inline bool Scheduler::irqUnregister(Irq irq)
 	{
 		core::Core::vectorManager.unregisterHandler(irq);
 		return true;
 	}
 	
-	inline uint8_t Scheduler::enterKernelCriticalSection()
-	{
-		return core::Core::vectorManager.lockInterruptsHigherThan(s_systemPriority);
-	}
-	
-	inline void exitKernelCriticalSection(uint8_t level)
-	{
-		core::Core::vectorManager.unlockInterruptsHigherThan(level);
-	}
-
-	inline bool Scheduler::IrqRegister(Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char *name)
-	{
-		core::Core::vectorManager.registerHandler(irq, handler, name);
-		return true;
-	}
-
-	inline bool Scheduler::IrqUnregister(Irq irq)
-	{
-		core::Core::vectorManager.unregisterHandler(irq);
-		return true;
-	}
-
 	inline void Scheduler::enterKernelCriticalSection()
 	{
 		Y_ASSERT(s_isKernelLocked == false);
 		if (s_isKernelLocked == false)
 		{
-			s_lockLevel = core::Core::vectorManager.lockInterruptsHigherThan(s_systemPriority + 1);
+			s_lockLevel = core::Core::vectorManager.lockInterruptsHigherThan(s_systemPriority+1);
 			s_isKernelLocked = true;
 		}
 	}
@@ -320,11 +299,11 @@ namespace kernel
 			break;
 
 		case ServiceCall::SvcNumber::registerIrq:
-			t_args[0] = IrqRegister(static_cast<Irq>(param0), reinterpret_cast<core::interfaces::IVectorManager::IrqHandler>(param1), reinterpret_cast<const char *>(param2));
+			t_args[0] = irqRegister(static_cast<Irq>(param0), reinterpret_cast<core::interfaces::IVectorManager::IrqHandler>(param1), reinterpret_cast<const char *>(param2));
 			break;
 
 		case ServiceCall::SvcNumber::unregisterIrq:
-			t_args[0] = IrqUnregister(static_cast<Irq>(param0)); //execute function and write result to stacked R0
+			t_args[0] = irqUnregister(static_cast<Irq>(param0)); //execute function and write result to stacked R0
 			break;
 
 		case ServiceCall::SvcNumber::startTask:
@@ -368,11 +347,11 @@ namespace kernel
 			core::Core::vectorManager.irqPriority(static_cast<Irq>(param0), static_cast<uint8_t>(param1), static_cast<uint8_t>(param2));
 			break;
 		case ServiceCall::SvcNumber::enterCriticalSection:
-			t_args[0] = core::Core::vectorManager.lockInterruptsHigherThan(s_systemPriority);
+			enterKernelCriticalSection();
 			break;
 
 		case ServiceCall::SvcNumber::exitCriticalSection:
-			core::Core::vectorManager.unlockInterruptsHigherThan(s_lockLevel); //set basepri to 0 in order to enable all interrupts
+			exitKernelCriticalSection(); //set basepri to 0 in order to enable all interrupts
 			break;
 
 		case kernel::ServiceCall::SvcNumber::mutexLock:

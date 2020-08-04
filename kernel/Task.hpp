@@ -86,6 +86,7 @@ namespace kernel
 			m_wakeUpTimeStamp(0),
 			m_mainFunction(function),
 			m_taskPriority(taskPriority),
+			m_isPrivilegied(false),
 			m_started(false),
 			m_state(state::notStarted),
 			m_name(name)
@@ -111,8 +112,46 @@ namespace kernel
 			m_stackPointer[4] = 0;	//R6
 			m_stackPointer[3] = 0;	//R5
 			m_stackPointer[2] = 0;	//R4
-			m_stackPointer[1] = 0x3;	//CONTROL, initial value, unprivileged, use PSP, no Floating Point
+			m_stackPointer[1] = 0x2 | !m_isPrivilegied;	//CONTROL, initial value, unprivileged, use PSP, no Floating Point
 			m_stackPointer[0] = 0xFFFFFFFD; //LR, return from exception, 8 Word Stack Length (no floating point), return in thread mode, use PSP
+
+		}
+		
+		constexpr Task(uint32_t stack[], uint32_t stackSize, TaskFunc function, uint32_t taskPriority, uint32_t parameter,bool isPrivilegied, const char *name)
+			: m_stackPointer(stack)
+			, m_stackOrigin(stack)
+			, m_stackSize(stackSize)
+			, m_wakeUpTimeStamp(0)
+			, m_mainFunction(function)
+			, m_taskPriority(taskPriority)
+			, m_isPrivilegied(isPrivilegied)
+			, m_started(false)
+			, m_state(state::notStarted)
+			, m_name(name)
+		{
+			m_stackPointer += (stackSize - 8);  //move pointer to bottom of stack (higher @) and reserve place to hold 8 register
+			//stacked by hardware
+			m_stackPointer[7] = 0x01000000;  //initial xPSR
+			m_stackPointer[6] = reinterpret_cast<uint32_t>(m_mainFunction); //PC
+			m_stackPointer[5] = reinterpret_cast<uint32_t>(taskFinished);   //LR
+			m_stackPointer[4] = 0; 			//R12
+			m_stackPointer[3] = 0; 			//R3
+			m_stackPointer[2] = 0; 			//R2
+			m_stackPointer[1] = 0; 			//R1
+			m_stackPointer[0] = parameter; 	//R0
+			
+			//stacked by software
+			m_stackPointer -= 10; 	//move to add 10 software stacked registers
+			m_stackPointer[9] = 0; 	//R11
+			m_stackPointer[8] = 0; 	//R10
+			m_stackPointer[7] = 0; 	//R9
+			m_stackPointer[6] = 0; 	//R8
+			m_stackPointer[5] = 0; 	//R7
+			m_stackPointer[4] = 0; 	//R6
+			m_stackPointer[3] = 0; 	//R5
+			m_stackPointer[2] = 0; 	//R4
+			m_stackPointer[1] = 0x2 | !m_isPrivilegied; 	//CONTROL, initial value, unprivileged, use PSP, no Floating Point
+			m_stackPointer[0] = 0xFFFFFFFD;  //LR, return from exception, 8 Word Stack Length (no floating point), return in thread mode, use PSP
 
 		}
 		
@@ -125,6 +164,7 @@ namespace kernel
 		interfaces::IWaitable* volatile m_waitingFor = nullptr;
 		TaskFunc m_mainFunction;
 		uint32_t m_taskPriority;
+		bool m_isPrivilegied;
 		bool m_started;
 		state m_state;
 		const char* m_name;
@@ -192,6 +232,11 @@ namespace kernel
 		public :
 			constexpr TaskWithStack<StackSize>(TaskFunc function, uint32_t taskPriority, uint32_t parameter = 0, const char* name = "undefined") :
 			Task(m_stack, StackSize, function, taskPriority,parameter, name)
+			{
+			}
+			
+			constexpr TaskWithStack<StackSize>(TaskFunc function, uint32_t taskPriority, uint32_t parameter = 0,bool isPrivilegied = false, const char* name = "undefined") :
+			Task(m_stack, StackSize, function, taskPriority, parameter,isPrivilegied, name)
 			{
 			}
 			
