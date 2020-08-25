@@ -92,7 +92,7 @@ namespace framework
 				static_cast<DualLinkNode<UnderLyingType, List>*>(node)->m_next = static_cast<DualLinkNode<UnderLyingType, List>>(next);
 			}
 			
-			static void previous(UnderLyingType node,UnderLyingType* previous)
+			static void previous(UnderLyingType* node,UnderLyingType* previous)
 			{
 				if (node == nullptr)
 					return;
