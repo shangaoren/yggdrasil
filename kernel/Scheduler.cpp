@@ -249,6 +249,7 @@ namespace kernel
 			Y_ASSERT(s_activeTask != nullptr);
 			Y_ASSERT(stackPosition > s_taskToStack->m_stackOrigin);
 			Y_ASSERT(stackPosition < &s_taskToStack->m_stackOrigin[s_taskToStack->m_stackSize]);
+			Y_ASSERT(!s_activeTask->isStackCorrupted());
 			s_taskToStack->m_stackPointer = stackPosition; //save stackPosition
 			s_taskToStack = nullptr;
 			s_activeTask->m_state = kernel::Task::state::active;

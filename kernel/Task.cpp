@@ -54,13 +54,24 @@ namespace kernel
 			//__BKPT(0);
 		}
 
-		//bool __attribute__((naked)) Task::startTaskStub(Task* task)
-		//{
-		//	asm volatile("PUSH {LR}");
-		//	svc(ServiceCall::SvcNumber::startTask);
-		//	asm volatile("POP {PC}");
-		//}
-	
-	
-
+		bool Task::isStackCorrupted()
+		{
+			if (m_stackOrigin[0] != 0xDEAD)
+				return true;
+			if (m_stackOrigin[1] != 0xBEEF)
+				return true;
+			if (m_stackOrigin[2] != 0xDEAD)
+				return true;
+			if (m_stackOrigin[3] != 0xBEEF)
+				return true;
+			if (m_stackOrigin[4] != 0xDEAD)
+				return true;
+			if (m_stackOrigin[5] != 0xBEEF)
+				return true;
+			if (m_stackOrigin[6] != 0xDEAD)
+				return true;
+			if (m_stackOrigin[7] != 0xBEEF)
+				return true;
+			return false;
+		}
 }

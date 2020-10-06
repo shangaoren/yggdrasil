@@ -63,10 +63,12 @@ namespace kernel
 	  
 	  using TaskFunc =  void (*)(uint32_t);
 		using StartTaskStub = bool(&)(Task*);
+		
 
 	  virtual bool start();
 		static StartTaskStub& startTaskStub;
 	  virtual bool stop();
+	  bool isStackCorrupted();
 	  static void taskFinished();
 
 	  enum class state : uint32_t
@@ -79,8 +81,8 @@ namespace kernel
 		  waitingMutex = 5,
 	  };
 
-		constexpr Task(uint32_t stack[], uint32_t stackSize, TaskFunc function, uint32_t taskPriority, uint32_t parameter = 0, const char *name = "undefined")
-		  : m_stackPointer(stack),
+	  constexpr Task(uint32_t* stack, uint32_t stackSize, TaskFunc function, uint32_t taskPriority, uint32_t parameter = 0, const char *name = "undefined")
+		  : m_stackPointer(stack + stackSize - 18), //move pointer to bottom of stack (higher @) and reserve place to hold 8 + 10 registers
 			m_stackOrigin(stack),
 			m_stackSize(stackSize),
 			m_wakeUpTimeStamp(0),
@@ -91,34 +93,40 @@ namespace kernel
 			m_state(state::notStarted),
 			m_name(name)
 		{
-			m_stackPointer += (stackSize - 8); //move pointer to bottom of stack (higher @) and reserve place to hold 8 register
-			//stacked by hardware
-			m_stackPointer[7] = 0x01000000; //initial xPSR
-			m_stackPointer[6] = reinterpret_cast<uint32_t>(m_mainFunction);//PC
-			m_stackPointer[5] = reinterpret_cast<uint32_t>(taskFinished);  //LR
-			m_stackPointer[4] = 0;			//R12
-			m_stackPointer[3] = 0;			//R3
-			m_stackPointer[2] = 0;			//R2
-			m_stackPointer[1] = 0;			//R1
-			m_stackPointer[0] = parameter;	//R0
+			m_stackOrigin[0] = 0xDEAD;
+			m_stackOrigin[1] = 0xBEEF;
+			m_stackOrigin[2] = 0xDEAD;
+			m_stackOrigin[3] = 0xBEEF;
+			m_stackOrigin[4] = 0xDEAD;
+			m_stackOrigin[5] = 0xBEEF;
+			m_stackOrigin[6] = 0xDEAD;
+			m_stackOrigin[7] = 0xBEEF;
 			
-			//stacked by software
-			m_stackPointer -= 10;	//move to add 10 software stacked registers
-			m_stackPointer[9] = 0;	//R11
-			m_stackPointer[8] = 0;	//R10
-			m_stackPointer[7] = 0;	//R9
-			m_stackPointer[6] = 0;	//R8
-			m_stackPointer[5] = 0;	//R7
-			m_stackPointer[4] = 0;	//R6
-			m_stackPointer[3] = 0;	//R5
-			m_stackPointer[2] = 0;	//R4
-			m_stackPointer[1] = 0x2 | !m_isPrivilegied;	//CONTROL, initial value, unprivileged, use PSP, no Floating Point
-			m_stackPointer[0] = 0xFFFFFFFD; //LR, return from exception, 8 Word Stack Length (no floating point), return in thread mode, use PSP
+			//stacked by hardware
+			m_stackPointer[17] = 0x01000000;								 //initial xPSR
+			m_stackPointer[16] = reinterpret_cast<uint32_t>(m_mainFunction); //PC
+			m_stackPointer[15] = reinterpret_cast<uint32_t>(taskFinished);   //LR
+			m_stackPointer[14] = 4;											 //R12
+			m_stackPointer[13] = 3;											 //R3
+			m_stackPointer[12] = 2;											 //R2
+			m_stackPointer[11] = 1;											 //R1
+			m_stackPointer[10] = parameter;									 //R0
+			// software stacked registers
+			m_stackPointer[9] = 11;						//R11
+			m_stackPointer[8] = 10;						//R10
+			m_stackPointer[7] = 9;						//R9
+			m_stackPointer[6] = 8;						//R8
+			m_stackPointer[5] = 7;						//R7
+			m_stackPointer[4] = 6;						//R6
+			m_stackPointer[3] = 5;						//R5
+			m_stackPointer[2] = 4;						//R4
+			m_stackPointer[1] = 0x2 | !m_isPrivilegied; //CONTROL, initial value, unprivileged, use PSP, no Floating Point
+			m_stackPointer[0] = 0xFFFFFFFD;				//LR, return from exception, 8 Word Stack Length (no floating point), return in thread mode, use PSP
 
 		}
-		
-		constexpr Task(uint32_t stack[], uint32_t stackSize, TaskFunc function, uint32_t taskPriority, uint32_t parameter,bool isPrivilegied, const char *name)
-			: m_stackPointer(stack)
+
+		constexpr Task(uint32_t* stack, uint32_t stackSize, TaskFunc function, uint32_t taskPriority, uint32_t parameter, bool isPrivilegied, const char *name)
+			: m_stackPointer(stack + stackSize - 19) //move pointer to bottom of stack (higher @) and reserve place to hold 8 + 10 registers
 			, m_stackOrigin(stack)
 			, m_stackSize(stackSize)
 			, m_wakeUpTimeStamp(0)
@@ -129,29 +137,35 @@ namespace kernel
 			, m_state(state::notStarted)
 			, m_name(name)
 		{
-			m_stackPointer += (stackSize - 8);  //move pointer to bottom of stack (higher @) and reserve place to hold 8 register
+			m_stackOrigin[0] = 0xDEAD;
+			m_stackOrigin[1] = 0xBEEF;
+			m_stackOrigin[2] = 0xDEAD;
+			m_stackOrigin[3] = 0xBEEF;
+			m_stackOrigin[4] = 0xDEAD;
+			m_stackOrigin[5] = 0xBEEF;
+			m_stackOrigin[6] = 0xDEAD;
+			m_stackOrigin[7] = 0xBEEF;
+
 			//stacked by hardware
-			m_stackPointer[7] = 0x01000000;  //initial xPSR
-			m_stackPointer[6] = reinterpret_cast<uint32_t>(m_mainFunction); //PC
-			m_stackPointer[5] = reinterpret_cast<uint32_t>(taskFinished);   //LR
-			m_stackPointer[4] = 0; 			//R12
-			m_stackPointer[3] = 0; 			//R3
-			m_stackPointer[2] = 0; 			//R2
-			m_stackPointer[1] = 0; 			//R1
-			m_stackPointer[0] = parameter; 	//R0
-			
-			//stacked by software
-			m_stackPointer -= 10; 	//move to add 10 software stacked registers
-			m_stackPointer[9] = 0; 	//R11
-			m_stackPointer[8] = 0; 	//R10
-			m_stackPointer[7] = 0; 	//R9
-			m_stackPointer[6] = 0; 	//R8
-			m_stackPointer[5] = 0; 	//R7
-			m_stackPointer[4] = 0; 	//R6
-			m_stackPointer[3] = 0; 	//R5
-			m_stackPointer[2] = 0; 	//R4
-			m_stackPointer[1] = 0x2 | !m_isPrivilegied; 	//CONTROL, initial value, unprivileged, use PSP, no Floating Point
-			m_stackPointer[0] = 0xFFFFFFFD;  //LR, return from exception, 8 Word Stack Length (no floating point), return in thread mode, use PSP
+			m_stackPointer[17] = 0x01000000;								 //initial xPSR
+			m_stackPointer[16] = reinterpret_cast<uint32_t>(m_mainFunction); //PC
+			m_stackPointer[15] = reinterpret_cast<uint32_t>(taskFinished);   //LR
+			m_stackPointer[14] = 4;											 //R12
+			m_stackPointer[13] = 3;											 //R3
+			m_stackPointer[12] = 2;											 //R2
+			m_stackPointer[11] = 1;											 //R1
+			m_stackPointer[10] = parameter;									 //R0
+			// software stacked registers
+			m_stackPointer[9] = 11;						//R11
+			m_stackPointer[8] = 10;						//R10
+			m_stackPointer[7] = 9;						//R9
+			m_stackPointer[6] = 8;						//R8
+			m_stackPointer[5] = 7;						//R7
+			m_stackPointer[4] = 6;						//R6
+			m_stackPointer[3] = 5;						//R5
+			m_stackPointer[2] = 4;						//R4
+			m_stackPointer[1] = 0x2 | !m_isPrivilegied; //CONTROL, initial value, unprivileged, use PSP, no Floating Point
+			m_stackPointer[0] = 0xFFFFFFFD;				//LR, return from exception, 8 Word Stack Length (no floating point), return in thread mode, use PSP
 
 		}
 		
@@ -211,20 +225,22 @@ namespace kernel
 
 		void setReturnValue(uint32_t value)
 		{
-			if ((*(m_stackPointer - 1) & 0b10000) == 0) // check bit #4 of control to know if stack contains floating point registers
-				*(reinterpret_cast<volatile int16_t *>(m_stackPointer + 10)) = value;
+			auto ctrl = *(m_stackPointer + 8);
+			if ((ctrl & 0b100) == 0) // check bit #2 of control to know if floating point is active or not
+				*(reinterpret_cast<volatile uint32_t *>(m_stackPointer + 10)) = value;
 			else
-				*(reinterpret_cast<volatile int16_t *>(m_stackPointer + 26)) = value; //TODO Test
+				*(reinterpret_cast<volatile uint32_t *>(m_stackPointer + 26)) = value; //TODO Test
 		}
 
 		void setReturnValue(int16_t value)
 		{
-			if ((*(m_stackPointer - 1) & 0b10000) == 0) // check bit #4 of control to know if stack contains floating point registers
+			uint32_t ctrl = *(m_stackPointer +1);
+			if ((ctrl & 0b100) == 0) // check bit #2 of control to know if floating point is active or not
 				*(reinterpret_cast<volatile int16_t *>(m_stackPointer + 10)) = value;
 			else
 				*(reinterpret_cast<volatile int16_t *>(m_stackPointer + 26)) = value; //TODO Test
 		}
-	};
+	}; 
 	
 	template<uint32_t StackSize>
 		class TaskWithStack : public Task
@@ -241,7 +257,7 @@ namespace kernel
 			}
 			
 		private :
-			uint32_t m_stack[StackSize]__attribute__((aligned(8))); 
+			uint32_t m_stack[StackSize]__attribute__((aligned(4))); 
 			
 		};
 } // namespace kernel

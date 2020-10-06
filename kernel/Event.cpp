@@ -131,6 +131,7 @@ namespace kernel
 	{
 		Hooks::onEventTimeout(this);
 		Y_ASSERT(task == m_waiter);
+		Y_ASSERT(task != nullptr);
 		m_waiter = nullptr; // no more task waiting the event
 		task->m_waitingFor = nullptr; //the task is no more waiting for event
 		task->setReturnValue(static_cast<int16_t>(-1));
