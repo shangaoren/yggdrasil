@@ -255,9 +255,8 @@ namespace kernel
 			Y_ASSERT(stackPosition < &s_taskToStack->m_stackOrigin[s_taskToStack->m_stackSize]);
 			Y_ASSERT(!s_taskToStack->isStackCorrupted());
 			s_taskToStack->setStackPointer(stackPosition);
-#ifdef KDEBUG
 			Y_ASSERT(s_taskToStack->m_stackUsage < (s_taskToStack->m_stackSize - 48)); //16 + 32 float
-#endif // KDEBUG
+
 			s_taskToStack = nullptr;
 			s_activeTask->m_state = kernel::Task::state::active;
 			Hooks::onTaskStartExec(s_activeTask);
