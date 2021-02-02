@@ -240,7 +240,11 @@ namespace kernel
 		s_trigger = trigger;
 		core::Core::contextSwitchTrigger();
 	}
-	
+
+	bool Scheduler::inThreadMode()
+	{
+		return core::Core::getCurrentInterruptNumber() == 0;
+	}
 
 	volatile uint32_t *__attribute__((optimize("O0"))) Scheduler::taskSwitch(uint32_t *stackPosition)
 	{
@@ -249,8 +253,11 @@ namespace kernel
 			Y_ASSERT(s_activeTask != nullptr);
 			Y_ASSERT(stackPosition > s_taskToStack->m_stackOrigin);
 			Y_ASSERT(stackPosition < &s_taskToStack->m_stackOrigin[s_taskToStack->m_stackSize]);
-			Y_ASSERT(!s_activeTask->isStackCorrupted());
-			s_taskToStack->m_stackPointer = stackPosition; //save stackPosition
+			Y_ASSERT(!s_taskToStack->isStackCorrupted());
+			s_taskToStack->setStackPointer(stackPosition);
+#ifdef KDEBUG
+			Y_ASSERT(s_taskToStack->m_stackUsage < (s_taskToStack->m_stackSize - 48)); //16 + 32 float
+#endif // KDEBUG
 			s_taskToStack = nullptr;
 			s_activeTask->m_state = kernel::Task::state::active;
 			Hooks::onTaskStartExec(s_activeTask);

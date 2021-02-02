@@ -92,6 +92,9 @@ namespace kernel
 			m_started(false),
 			m_state(state::notStarted),
 			m_name(name)
+#ifdef KDEBUG
+			,m_stackUsage(0)
+#endif
 		{
 			m_stackOrigin[0] = 0xDEAD;
 			m_stackOrigin[1] = 0xBEEF;
@@ -136,6 +139,9 @@ namespace kernel
 			, m_started(false)
 			, m_state(state::notStarted)
 			, m_name(name)
+#ifdef KDEBUG
+			,m_stackUsage(0)
+#endif
 		{
 			m_stackOrigin[0] = 0xDEAD;
 			m_stackOrigin[1] = 0xBEEF;
@@ -172,7 +178,7 @@ namespace kernel
 	private:
 		uint32_t volatile* m_stackPointer;
 		uint32_t* m_stackOrigin;
-		uint32_t m_stackSize;
+		const uint32_t m_stackSize;
 
 		volatile uint32_t m_wakeUpTimeStamp;
 		interfaces::IWaitable* volatile m_waitingFor = nullptr;
@@ -182,6 +188,9 @@ namespace kernel
 		bool m_started;
 		state m_state;
 		const char* m_name;
+#ifdef KDEBUG
+		uint32_t m_stackUsage; // used to measure the usage of task's stack
+#endif // KDEBUG
 
 		/*Compare two Task timestamps
 		 * if base task was running after compared result is 1
@@ -239,6 +248,14 @@ namespace kernel
 				*(reinterpret_cast<volatile int16_t *>(m_stackPointer + 10)) = value;
 			else
 				*(reinterpret_cast<volatile int16_t *>(m_stackPointer + 26)) = value; //TODO Test
+		}
+
+		inline void setStackPointer(uint32_t* stackPosition)
+		{
+			m_stackPointer = stackPosition;
+#ifdef KDEBUG
+			m_stackUsage = m_stackSize - (stackPosition-m_stackOrigin);
+#endif // KDEBUG
 		}
 	}; 
 	

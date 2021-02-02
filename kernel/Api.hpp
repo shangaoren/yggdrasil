@@ -65,7 +65,17 @@ namespace kernel
 		
 		/*set a Task into sleep for an amount of ms
 		 *@Warning: do not call it if you're not in a Task*/
-		const static inline auto& sleep = core::Core::supervisorCall < ServiceCall::SvcNumber::sleepTask, void, uint32_t>;
+#ifdef KDEBUG
+		static inline void sleep(uint32_t ticks)
+		{
+			Y_ASSERT(Scheduler::inThreadMode());
+			return core::Core::supervisorCall<ServiceCall::SvcNumber::sleepTask, void, uint32_t>(ticks);
+		}
+#else
+		const static inline auto &sleep = core::Core::supervisorCall<ServiceCall::SvcNumber::sleepTask, void, uint32_t>;
+#endif // KDEBUG
+
+		
 
 		/*get kernel timeStamp*/
 		static inline uint64_t getTicks()

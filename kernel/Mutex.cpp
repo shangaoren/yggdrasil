@@ -37,6 +37,7 @@ namespace kernel
 	
 	int16_t Mutex::lock(uint32_t timeout)
 	{
+		Y_ASSERT(Scheduler::inThreadMode());
 		return supervisorCallLockMutex(this, timeout);
 	}
 	

@@ -141,10 +141,10 @@ namespace kernel
 		static volatile uint32_t* taskSwitch(uint32_t *stackPosition);
 		//set pendSv, trigger context switch
 		static void setPendSv(changeTaskTrigger trigger);
-		static void checkStack();
-
-		static void stopWait(interfaces::IWaitable *waitable);
-		static void wait(interfaces::IWaitable *waitable);
+		//static void checkStack();
+		static bool inThreadMode();
+		//static void stopWait(interfaces::IWaitable *waitable);
+		//static void wait(interfaces::IWaitable *waitable);
 		//systick handler
 		static void systemTimerTick();
 		static void svcBootstrap();

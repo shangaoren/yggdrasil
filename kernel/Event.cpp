@@ -91,6 +91,7 @@ namespace kernel
 	
 	int16_t Event::wait(uint32_t duration)
 	{
+		Y_ASSERT(Scheduler::inThreadMode());
 		return serviceCallEventWait(this, duration);
 	}
 	
