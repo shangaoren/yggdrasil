@@ -1,6 +1,7 @@
 #pragma once
 namespace kernel
 {
+	[[maybe_unused]]
 	static void stop()
 	{
 		asm volatile("bkpt #0");

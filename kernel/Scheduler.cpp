@@ -101,6 +101,7 @@ namespace kernel
 		//Setup pendSV interrupt (used for task change)
 		core::Core::vectorManager.irqPriority(core::Core::taskSwitchIrqNumber, 0xFF); //Minimum priority for task change
 		core::Core::vectorManager.registerHandler(core::Core::taskSwitchIrqNumber, core::Core::contextSwitchHandler);
+
 		s_interruptInstalled = true;
 		return true;
 	}
@@ -139,7 +140,8 @@ namespace kernel
 		Y_ASSERT(s_isKernelLocked == false);
 		if (s_isKernelLocked == false)
 		{
-			s_lockLevel = core::Core::vectorManager.lockInterruptsHigherThan(s_systemPriority+1);
+			//s_lockLevel = core::Core::vectorManager.lockInterruptsHigherThan(s_systemPriority+1);
+			core::Core::vectorManager.lockAllInterrupts();
 			s_isKernelLocked = true;
 		}
 	}
@@ -149,7 +151,8 @@ namespace kernel
 		Y_ASSERT(s_isKernelLocked == true);
 		if (s_isKernelLocked == true)
 		{
-			core::Core::vectorManager.unlockInterruptsHigherThan(s_lockLevel);
+			//core::Core::vectorManager.unlockInterruptsHigherThan(s_lockLevel);
+			core::Core::vectorManager.enableAllInterrupts();
 			s_isKernelLocked = false;
 		}
 	}
@@ -348,10 +351,6 @@ namespace kernel
 
 		case ServiceCall::SvcNumber::setGlobalPriority:
 			core::Core::vectorManager.irqPriority(static_cast<Irq>(param0), static_cast<uint8_t>(param1));
-			break;
-
-		case ServiceCall::SvcNumber::setPriority:
-			core::Core::vectorManager.irqPriority(static_cast<Irq>(param0), static_cast<uint8_t>(param1), static_cast<uint8_t>(param2));
 			break;
 		case ServiceCall::SvcNumber::enterCriticalSection:
 			enterKernelCriticalSection();
