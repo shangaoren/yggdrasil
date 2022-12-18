@@ -57,12 +57,12 @@ namespace kernel
 		
 	private:
 		EventList m_waiting;
-		Task *m_owner;
+		TaskController *m_owner;
 
 		static int16_t kernelLockMutex(Mutex* mutex, uint32_t duration);
 		static bool kernelReleaseMutex(Mutex* mutex);
-		void stopWait(Task *task);
-		void onTimeout(Task* task);
+		void stopWait(TaskController *task);
+		void onTimeout(TaskController* task);
 		
 		// call kernel to lock mutex
 		//@return int16_t, 1 if when succes, -1 if timeout, 0 if error

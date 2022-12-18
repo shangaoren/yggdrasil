@@ -40,14 +40,14 @@ namespace kernel
 		kernel::Hooks::onEventTrigger(event);
 		if (event->m_waiter != nullptr)
 		{
-			Task* newReadyTask = event->m_waiter;
+			TaskController* newReadyTask = event->m_waiter;
 			event->m_waiter = nullptr;
 			Y_ASSERT(!Scheduler::s_ready.contain(newReadyTask)); //If the event ready task is already in ready list, we have a problem
 			newReadyTask->m_waitingFor = nullptr;
 			event->stopWait(newReadyTask);
 			Y_ASSERT(!Scheduler::s_waiting.contain(newReadyTask)); 
-			Scheduler::s_ready.insert(newReadyTask, Task::priorityCompare);
-			newReadyTask->m_state = kernel::Task::state::ready;
+			Scheduler::s_ready.insert(newReadyTask, TaskController::priorityCompare);
+			newReadyTask->m_state = kernel::TaskController::State::ready;
 			kernel::Hooks::onTaskReady(newReadyTask);
 			Scheduler::schedule(kernel::Scheduler::changeTaskTrigger::wakeByEvent);
 		}
@@ -77,10 +77,10 @@ namespace kernel
 			if (duration > 0)
 			{
 				Scheduler::s_activeTask->m_wakeUpTimeStamp = Scheduler::s_ticks + duration;
-				Scheduler::s_waiting.insert(Scheduler::s_activeTask, Task::sleepCompare);
+				Scheduler::s_waiting.insert(Scheduler::s_activeTask, TaskController::sleepCompare);
 			}
 			Scheduler::s_activeTask->m_waitingFor = event;
-			Scheduler::s_activeTask->m_state = Task::state::waitingEvent;		   //sets active task as waiting
+			Scheduler::s_activeTask->m_state = TaskController::State::waitingEvent;		   //sets active task as waiting
 			Scheduler::s_taskToStack = Scheduler::s_activeTask;
 			Scheduler::s_activeTask = Scheduler::s_ready.getFirst();
 			Hooks::onTaskWaitEvent(Scheduler::s_taskToStack, event);
@@ -119,7 +119,7 @@ namespace kernel
 		return m_isRaised;
 	}
 
-	void Event::stopWait(Task* task)
+	void Event::stopWait(TaskController* task)
 	{
 		if (task->m_wakeUpTimeStamp != 0)
 		{
@@ -128,7 +128,7 @@ namespace kernel
 		}
 		
 	}
-	void Event::onTimeout(Task* task)
+	void Event::onTimeout(TaskController* task)
 	{
 		Hooks::onEventTimeout(this);
 		Y_ASSERT(task == m_waiter);
@@ -137,8 +137,8 @@ namespace kernel
 		task->m_waitingFor = nullptr; //the task is no more waiting for event
 		task->setReturnValue(static_cast<int16_t>(-1));
 		task->m_wakeUpTimeStamp = 0;
-		Scheduler::s_ready.insert(task, Task::priorityCompare);
-		task->m_state = kernel::Task::state::ready;
+		Scheduler::s_ready.insert(task, TaskController::priorityCompare);
+		task->m_state = kernel::TaskController::State::ready;
 		Hooks::onTaskReady(task);
 		Scheduler::schedule(kernel::Scheduler::changeTaskTrigger::wakeByEvent);
 	}

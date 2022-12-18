@@ -77,13 +77,13 @@ namespace kernel
 
 		void reset();
 
-		void stopWait(Task* task) final;
-		void onTimeout(Task* task) final;
+		void stopWait(TaskController* task) final;
+		void onTimeout(TaskController* task) final;
 
 	  private:
 		
 		//------------------PRIVATE DATA------------------------
-		Task* volatile m_waiter;
+		TaskController* volatile m_waiter;
 		bool m_isRaised;
 		const char *m_name;
 

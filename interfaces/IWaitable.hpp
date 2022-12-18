@@ -33,7 +33,7 @@ namespace kernel
 {
 	//Forward Declaration
 	class Scheduler;
-	class Task;
+	class TaskController;
 	namespace interfaces
 	{
 		
@@ -46,9 +46,9 @@ namespace kernel
 
 
 		  private:
-			virtual void stopWait(Task* task) = 0;
+			virtual void stopWait(TaskController* task) = 0;
 
-			virtual void onTimeout(Task* task) = 0;
+			virtual void onTimeout(TaskController* task) = 0;
 
 		}; // class IWaitable
 	}	  // namespace interfaces

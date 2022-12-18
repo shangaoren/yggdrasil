@@ -17,7 +17,7 @@ namespace kernel
 		}
 		
 		
-		static void onTaskStart(Task *task)
+		static void onTaskStart(TaskController *task)
 		{
 #ifdef SYSVIEW
 			kernel::SystemView::get().sendTaskInfo(&task);
@@ -26,40 +26,40 @@ namespace kernel
 #endif
 		}
 
-		static void onTaskStartExec(Task *task)
+		static void onTaskStartExec(TaskController *task)
 		{
 #ifdef SYSVIEW
 			SystemView::get().onTaskStartExec(s_activeTask);
 #endif
 		}
 
-		static void onTaskStopExec(Task *task)
+		static void onTaskStopExec(TaskController *task)
 		{
 			
 		}
 
-		static void onTaskClose(Task *task)
+		static void onTaskClose(TaskController *task)
 		{
 #ifdef SYSVIEW
 			SystemView::get().onTaskTerminate(&task);
 #endif
 		}
 
-		static void onTaskReady(Task *task)
+		static void onTaskReady(TaskController *task)
 		{
 #ifdef SYSVIEW
 			kernel::SystemView::get().onTaskStartReady(s_taskToStack);
 #endif
 		}
 
-		static void onTaskSleep(Task *task, uint64_t time)
+		static void onTaskSleep(TaskController *task, uint64_t time)
 		{
 #ifdef SYSVIEW
 			SystemView::get().onTaskStopReady(s_taskToStack, static_cast<uint8_t>(changeTaskTrigger::enterSleep));
 #endif
 		}
 
-		static void onTaskWaitEvent(Task *task, Event *event)
+		static void onTaskWaitEvent(TaskController *task, Event *event)
 		{
 			
 		}
@@ -75,7 +75,7 @@ namespace kernel
 		}
 		
 		/* Mutex*/
-		static void onMutexLock(Mutex *mutex, Task* locker)
+		static void onMutexLock(Mutex *mutex, TaskController* locker)
 		{
 			
 		}
@@ -84,11 +84,11 @@ namespace kernel
 		{
 		}
 
-		static void onMutexWait(Mutex *mutex,Task* waiter, uint32_t timeout)
+		static void onMutexWait(Mutex *mutex,TaskController* waiter, uint32_t timeout)
 		{
 		}
 
-		static void onMutexTimeout(Mutex *mutex, Task *task)
+		static void onMutexTimeout(Mutex *mutex, TaskController *task)
 		{
 			
 		}

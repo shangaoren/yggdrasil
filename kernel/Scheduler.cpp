@@ -36,8 +36,8 @@ namespace kernel
 	bool Scheduler::s_interruptInstalled = false;
 	volatile uint64_t Scheduler::s_ticks = 0;
 	volatile Scheduler::changeTaskTrigger Scheduler::s_trigger = Scheduler::changeTaskTrigger::none;		
-	Task* volatile Scheduler::s_activeTask = nullptr;
-	Task* volatile Scheduler::s_taskToStack = nullptr;
+	TaskController* volatile Scheduler::s_activeTask = nullptr;
+	TaskController* volatile Scheduler::s_taskToStack = nullptr;
 
 	volatile bool Scheduler::scheduled = false;
 	volatile uint8_t Scheduler::s_lockLevel = 0;
@@ -69,7 +69,7 @@ namespace kernel
 		if (s_ready.isEmpty()) //No Task in task list, cannot start Scheduler
 			return false;
 
-		core::Core::idleTask.start(); // Add idle task
+		core::Core::idleTask.start(core::Core::idleFunc,true,0, 0, "idle"); // Add idle task
 		if (!installKernelInterrupt())
 			return false;
 		//Init Systick
@@ -154,14 +154,13 @@ namespace kernel
 		}
 	}
 
-	bool Scheduler::startTask(Task &task)
+	bool Scheduler::startTask(TaskController &task)
 	{
-		if (task.m_started)
+		if (task.m_state != TaskController::State::notStarted)
 			return false;
-		s_started.insert(&task, Task::priorityCompare);
-		s_ready.insert(&task, Task::priorityCompare);
-		task.m_started = true;
-		task.m_state = Task::state::ready;
+		s_started.insert(&task, TaskController::priorityCompare);
+		s_ready.insert(&task, TaskController::priorityCompare);
+		task.m_state = TaskController::State::ready;
 		Hooks::onTaskStart(&task);
 		if (s_schedulerStarted)
 			schedule(kernel::Scheduler::changeTaskTrigger::taskStarted);
@@ -174,19 +173,19 @@ namespace kernel
 		Y_ASSERT(s_ready.count() != 0); //assertion to check there is ready tasks
 		if (s_activeTask != nullptr)
 		{
-			if (s_ready.peekFirst()->m_taskPriority > s_activeTask->m_taskPriority) //a task with higher priority is waiting, trigger context switching
+			if (s_ready.peekFirst()->m_priority > s_activeTask->m_priority) //a task with higher priority is waiting, trigger context switching
 			{
 				//Store currently running task
 				Y_ASSERT(!s_ready.contain(s_activeTask)); //currently running task not already in ready list
 				Y_ASSERT(!s_sleeping.contain(s_activeTask));
-				s_ready.insert(s_activeTask, Task::priorityCompare);
+				s_ready.insert(s_activeTask, TaskController::priorityCompare);
 				Hooks::onTaskStopExec(s_activeTask);
 				Hooks::onTaskReady(s_activeTask);
 				if (s_taskToStack == nullptr)
 					s_taskToStack = s_activeTask;
 				s_activeTask = nullptr;
 				//If there is no task to be saved already, put active task in s_previousTask to save context
-				s_taskToStack->m_state = kernel::Task::state::ready;
+				s_taskToStack->m_state = kernel::TaskController::State::ready;
 				//Take the first available task
 				s_activeTask = s_ready.getFirst();
 				Y_ASSERT(s_activeTask != nullptr);
@@ -202,13 +201,14 @@ namespace kernel
 		return false;
 	}
 
-	bool Scheduler::stopTask(Task &task)
+	bool Scheduler::stopTask(TaskController *task)
 	{
-		s_ready.remove(&task);
-		s_sleeping.remove(&task);
-		s_started.remove(&task);
-		Hooks::onTaskClose(&task);
-		if (s_activeTask == &task)
+		s_ready.remove(task);
+		s_sleeping.remove(task);
+		s_started.remove(task);
+		task->m_state = TaskController::State::notStarted;
+		Hooks::onTaskClose(task);
+		if (s_activeTask == task)
 		{
 			s_activeTask = s_ready.getFirst();
 			core::Core::restoreTask(s_activeTask->m_stackPointer);
@@ -226,8 +226,8 @@ namespace kernel
 		s_taskToStack->m_wakeUpTimeStamp = s_ticks + ms;
 		//Put active Task to sleep
 		Y_ASSERT(!s_sleeping.contain(s_taskToStack)); // if active task already in sleeping list we have a problem
-		s_sleeping.insert(s_taskToStack, Task::sleepCompare);
-		s_taskToStack->m_state = Task::state::sleeping;
+		s_sleeping.insert(s_taskToStack, TaskController::sleepCompare);
+		s_taskToStack->m_state = TaskController::State::sleeping;
 		Hooks::onTaskSleep(s_taskToStack, ms);
 		s_activeTask = s_ready.getFirst();
 		Y_ASSERT(s_activeTask != nullptr);							 // ready list should at least contain idle task
@@ -258,7 +258,7 @@ namespace kernel
 			Y_ASSERT(s_taskToStack->m_stackUsage < (s_taskToStack->m_stackSize - 48)); //16 + 32 float
 
 			s_taskToStack = nullptr;
-			s_activeTask->m_state = kernel::Task::state::active;
+			s_activeTask->m_state = kernel::TaskController::State::active;
 			Hooks::onTaskStartExec(s_activeTask);
 			s_trigger = kernel::Scheduler::changeTaskTrigger::none;
 		}
@@ -278,17 +278,17 @@ namespace kernel
 		while (!s_sleeping.isEmpty() && (s_sleeping.peekFirst()->m_wakeUpTimeStamp) <= s_ticks) //one task or more is waiting, let's see if waiting is over
 		{
 			needSchedule = true;
-			Task *readyTask = s_sleeping.getFirst();
+			TaskController *readyTask = s_sleeping.getFirst();
 			Y_ASSERT(readyTask != nullptr);
 			readyTask->m_wakeUpTimeStamp = 0;
-			readyTask->m_state = kernel::Task::state::ready;
+			readyTask->m_state = kernel::TaskController::State::ready;
 			Y_ASSERT(!s_ready.contain(readyTask)); //new Ready task should not being already in ready list
-			s_ready.insert(readyTask, Task::priorityCompare);
+			s_ready.insert(readyTask, TaskController::priorityCompare);
 			Hooks::onTaskReady(readyTask);
 		}
 		while (!s_waiting.isEmpty() && (s_waiting.peekFirst()->m_wakeUpTimeStamp <= s_ticks))
 		{
-			Task *timeouted = s_waiting.getFirst();
+			TaskController *timeouted = s_waiting.getFirst();
 			Y_ASSERT(timeouted->m_waitingFor != nullptr);
 			timeouted->m_waitingFor->onTimeout(timeouted);
 		}
@@ -314,11 +314,11 @@ namespace kernel
 			break;
 
 		case ServiceCall::SvcNumber::startTask:
-			t_args[0] = startTask(*(reinterpret_cast<Task *>(param0)));
+			t_args[0] = startTask(*(reinterpret_cast<TaskController *>(param0)));
 			break;
 
 		case ServiceCall::SvcNumber::stopTask:
-			t_args[0] = stopTask(*(reinterpret_cast<Task *>(param0)));
+			t_args[0] = stopTask(reinterpret_cast<TaskController *>(param0));
 			break;
 
 		case ServiceCall::SvcNumber::sleepTask:

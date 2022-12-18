@@ -54,7 +54,7 @@ namespace kernel
 		friend class ServiceCall;
 		friend class Api;
 		friend class SystemView;
-		friend class Task;
+		friend class TaskController;
 		friend class Mutex;
 		friend class Event;
 		friend class ::core::Core;
@@ -97,8 +97,8 @@ namespace kernel
 
 		/* Task Related Variables */
 		static volatile changeTaskTrigger s_trigger;
-		static Task *volatile s_activeTask;
-		static Task *volatile s_taskToStack;
+		static TaskController *volatile s_activeTask;
+		static TaskController *volatile s_taskToStack;
 		static volatile bool scheduled;
 		static volatile uint8_t s_lockLevel; // store the level of lock before critical section enters
 		static volatile bool s_isKernelLocked; // indicates if the kernel is in a critical section mode 
@@ -125,7 +125,7 @@ namespace kernel
 		static void exitKernelCriticalSection();
 
 		//start a task
-		static bool startTask(Task &task);
+		static bool startTask(TaskController &task);
 
 		/**
 		 * Look at ready task to see if a context switching is needed
@@ -134,8 +134,7 @@ namespace kernel
 		static void asmPendSv();
 		static void asmSvcHandler();
 		/*Stop a Task*/
-		/*TODO Implement*/
-		static bool stopTask(Task &task);
+		static bool stopTask(TaskController *task);
 		//function to sleep a task for a number of ms
 		static bool sleep(uint32_t ms);
 		static volatile uint32_t* taskSwitch(uint32_t *stackPosition);

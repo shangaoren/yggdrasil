@@ -218,7 +218,7 @@ namespace framework
 			bool remove(UnderLyingType* node)
 			{
 				DualLinkNode < UnderLyingType, List> *iterator;
-				uint32_t count = 0;
+				[[maybe_unused]] uint32_t count = 0; // used for debug purposes
 				if (node == m_first)
 				{
 					iterator = m_first;

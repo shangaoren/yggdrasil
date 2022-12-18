@@ -54,7 +54,6 @@ namespace kernel
 	// A task want to get a mutex wait for it if already lock by someone else or get it if free
 	int16_t Mutex::kernelLockMutex(Mutex* mutex, uint32_t duration)
 	{
-		int16_t result = 0;
 		Y_ASSERT(Scheduler::s_activeTask != nullptr);
 		if (mutex->m_owner == nullptr)
 		{
@@ -65,14 +64,14 @@ namespace kernel
 		else
 		{
 			Y_ASSERT(Scheduler::s_activeTask != nullptr);
-			mutex->m_waiting.insert(Scheduler::s_activeTask, Task::priorityCompare);
+			mutex->m_waiting.insert(Scheduler::s_activeTask, TaskController::priorityCompare);
 			if (duration > 0)
 			{
 				Scheduler::s_activeTask->m_wakeUpTimeStamp = Scheduler::s_ticks + duration;
-				Scheduler::s_waiting.insert(Scheduler::s_activeTask, Task::sleepCompare);
+				Scheduler::s_waiting.insert(Scheduler::s_activeTask, TaskController::sleepCompare);
 			}
 			Scheduler::s_activeTask->m_waitingFor = mutex;
-			Scheduler::s_activeTask->m_state = kernel::Task::state::waitingMutex;
+			Scheduler::s_activeTask->m_state = kernel::TaskController::State::waitingMutex;
 			Scheduler::s_taskToStack = Scheduler::s_activeTask;
 			Scheduler::s_activeTask = Scheduler::s_ready.getFirst();
 			Hooks::onMutexWait(mutex, Scheduler::s_taskToStack, duration);
@@ -81,7 +80,7 @@ namespace kernel
 		}
 	}
 
-	void Mutex::stopWait(Task *task)
+	void Mutex::stopWait(TaskController *task)
 	{
 		if (task->m_wakeUpTimeStamp != 0)
 		{
@@ -98,13 +97,13 @@ namespace kernel
 			return false;
 		if (!mutex->m_waiting.isEmpty())
 		{
-			Task* newReadyTask = mutex->m_waiting.getFirst();
+			TaskController* newReadyTask = mutex->m_waiting.getFirst();
 			Y_ASSERT(newReadyTask != nullptr);
 			Y_ASSERT(!Scheduler::s_ready.contain(newReadyTask)); //If the event ready task is already in ready list, we have a problem
 			newReadyTask->m_waitingFor = nullptr;
 			mutex->stopWait(newReadyTask);
-			Scheduler::s_ready.insert(newReadyTask, Task::priorityCompare);
-			newReadyTask->m_state = kernel::Task::state::ready;
+			Scheduler::s_ready.insert(newReadyTask, TaskController::priorityCompare);
+			newReadyTask->m_state = kernel::TaskController::State::ready;
 			mutex->m_owner = newReadyTask;
 			Hooks::onTaskReady(newReadyTask);
 			Hooks::onMutexLock(mutex, newReadyTask);
@@ -117,7 +116,7 @@ namespace kernel
 		return true;
 	}
 
-	void Mutex::onTimeout(Task* task)
+	void Mutex::onTimeout(TaskController* task)
 	{
 		Hooks::onMutexTimeout(this, task);
 		Y_ASSERT(m_waiting.contain(task));
@@ -126,8 +125,8 @@ namespace kernel
 		task->m_waitingFor = nullptr; //the task is no more waiting for mutex
 		task->setReturnValue(static_cast<int16_t>(-1)); // timeout code
 		task->m_wakeUpTimeStamp = 0;
-		Scheduler::s_ready.insert(task, Task::priorityCompare);
-		task->m_state = kernel::Task::state::ready;
+		Scheduler::s_ready.insert(task, TaskController::priorityCompare);
+		task->m_state = kernel::TaskController::State::ready;
 		Hooks::onMutexTimeout(this, task);
 		Hooks::onTaskReady(task);
 		Scheduler::schedule(kernel::Scheduler::changeTaskTrigger::mutexTimeout);	
