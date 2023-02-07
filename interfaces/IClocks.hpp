@@ -27,37 +27,21 @@ Software without prior written authorization from Florian GERARD
 */
 
 #pragma once
-
-
 #include <cstdint>
 
-namespace kernel
+
+
+namespace core
 {
-	class ServiceCall
+	namespace interfaces
 	{
-		friend class Api;
-		
-	public:
-		
-		enum class SvcNumber : uint8_t
+		class IClocks
 		{
-			startFirstTask,
-			registerIrq,
-			unregisterIrq,
-			setGlobalPriority,
-			setPriority,
-			clearIrq,
-			enableIrq,
-			disableIrq,
-			startTask,
-			stopTask,
-			sleepTask,
-			signalEvent,
-			waitEvent,
-			enterCriticalSection,
-			exitCriticalSection,
-			mutexLock,
-			mutexRelease,
-		};
-	};
-}
+		public:
+			virtual uint32_t getSystemCoreFrequency() = 0;
+			virtual bool init() = 0;
+			virtual uint32_t getClockFrequency(uint32_t clockID) = 0;
+			
+		}; //End namespace IClocks
+	}	//End namespace interfaces
+} //End namespace core

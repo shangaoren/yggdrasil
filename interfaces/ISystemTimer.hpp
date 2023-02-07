@@ -26,38 +26,21 @@ Software without prior written authorization from Florian GERARD
 
 */
 
+
 #pragma once
-
-
 #include <cstdint>
+#include "yggdrasil/interfaces/IVectorsManager.hpp"
 
-namespace kernel
+namespace core
 {
-	class ServiceCall
+	namespace interfaces
 	{
-		friend class Api;
-		
-	public:
-		
-		enum class SvcNumber : uint8_t
+		class ISystemTimer
 		{
-			startFirstTask,
-			registerIrq,
-			unregisterIrq,
-			setGlobalPriority,
-			setPriority,
-			clearIrq,
-			enableIrq,
-			disableIrq,
-			startTask,
-			stopTask,
-			sleepTask,
-			signalEvent,
-			waitEvent,
-			enterCriticalSection,
-			exitCriticalSection,
-			mutexLock,
-			mutexRelease,
+		public:
+			virtual void initSystemTimer(uint32_t coreFrequency, uint32_t ticksFrequency) = 0;
+			virtual void startSystemTimer() = 0;
+			virtual Irq getIrq() =0;
 		};
-	};
-}
+	}	//End namespace interfaces
+}//End namespace core

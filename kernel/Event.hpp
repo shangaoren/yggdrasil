@@ -1,6 +1,6 @@
 /*MIT License
 
-Copyright (c) 2018 Florian GERARD
+Copyright (c) 2019 Florian GERARD
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -32,17 +32,18 @@ Software without prior written authorization from Florian GERARD
 
 #include "Task.hpp" 
 #include "ServiceCall.hpp"
+#include "yggdrasil/interfaces/IWaitable.hpp"
 
 
 namespace kernel
 {
 	
-	class Event
+	class Event : public interfaces::IWaitable
 	{
 		friend class Scheduler; //let Scheduler access private function but no one else
 	public:
 		
-		Event(bool isRaised = false) : m_isRaised(isRaised)
+		constexpr Event(bool isRaised = false, const char*name = nullptr) :m_waiter(nullptr), m_isRaised(isRaised), m_name(name)
 		{
 		}
 		
@@ -52,6 +53,9 @@ namespace kernel
 			
 		}
 		
+		static bool kernelSignalEvent(Event* event);
+		static int16_t kernelWaitEvent(Event* event, uint32_t duration);
+		
 		
 				
 		//wait for an event, used by Scheduler
@@ -59,67 +63,37 @@ namespace kernel
 		//@parameter Task waiting for the event
 		//return true if the task is waiting,
 		//false if event is already rised
-		virtual bool wait()
-		{
-			waitEventKernel(this);
-			return true;
-		}
+		int16_t wait(uint32_t duration = 0);
 		
 		
 		//Signal that an event occured
 		//if a task is already waiting then return it to wake it up
 		//else rise event and return nullptr
-		virtual bool signal()
-		{
-			signalEventKernel(this);
-			return true;
-		}
+		bool signal();
 		
-		virtual bool someoneWaiting()
-		{
-			if (!m_list.isEmpty())
-				return true;
-			else
-				return false;
-		}
+		bool someoneWaiting();
 
-		virtual bool isAlreadyUp()
-		{
-			return m_isRaised;
-		}
+		bool isAlreadyUp();
 
-		virtual void reset()
-		{
-			m_isRaised = false;
-		}
+		void reset();
 
-		private:
+		void stopWait(TaskController* task) final;
+		void onTimeout(TaskController* task) final;
+
+	  private:
 		
 		//------------------PRIVATE DATA------------------------
-		EventList m_list;
+		TaskController* volatile m_waiter;
 		bool m_isRaised;
+		const char *m_name;
+
+		//------------------PRIVATE FUNCTIONS---------------------
 		
+		using SupervisorEventWait = int16_t(&)(Event*, uint32_t);
+		static SupervisorEventWait& serviceCallEventWait;
 		
-		
-		
-		//------------------PRIVATE FUNCTION---------------------
-		static bool __attribute__((naked, optimize("O0"))) waitEventKernel(Event* event)
-		{
-			asm volatile("PUSH {LR}");
-			svc(ServiceCall::SvcNumber::waitEvent);
-			asm volatile(
-				"POP {LR}\n\t"
-				"BX LR");
-		}
-		
-		static bool __attribute__((naked, optimize("O0"))) signalEventKernel(Event* event)
-		{
-			asm volatile("PUSH {LR}");
-			svc(ServiceCall::SvcNumber::signalEvent);
-			asm volatile(
-				"POP {LR}\n\t"
-				"BX LR");
-		}
+		using SupervisorEventSignal = bool(&)(Event*);
+		static SupervisorEventSignal& serviceCallEventSignal;
 	
 		};
 	

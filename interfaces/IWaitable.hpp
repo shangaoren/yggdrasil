@@ -25,39 +25,31 @@ in advertising or otherwise to promote the sale, use or other dealings in this
 Software without prior written authorization from Florian GERARD
 
 */
-
 #pragma once
-
-
 #include <cstdint>
+#include "yggdrasil/framework/DualLinkedList.hpp"
 
 namespace kernel
 {
-	class ServiceCall
+	//Forward Declaration
+	class Scheduler;
+	class TaskController;
+	namespace interfaces
 	{
-		friend class Api;
 		
-	public:
-		
-		enum class SvcNumber : uint8_t
+		/* Interface to create object with a timeout */
+		class IWaitable
 		{
-			startFirstTask,
-			registerIrq,
-			unregisterIrq,
-			setGlobalPriority,
-			setPriority,
-			clearIrq,
-			enableIrq,
-			disableIrq,
-			startTask,
-			stopTask,
-			sleepTask,
-			signalEvent,
-			waitEvent,
-			enterCriticalSection,
-			exitCriticalSection,
-			mutexLock,
-			mutexRelease,
-		};
-	};
-}
+			friend class kernel::Scheduler;
+
+		  public:
+
+
+		  private:
+			virtual void stopWait(TaskController* task) = 0;
+
+			virtual void onTimeout(TaskController* task) = 0;
+
+		}; // class IWaitable
+	}	  // namespace interfaces
+} // namespace kernel

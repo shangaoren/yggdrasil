@@ -30,6 +30,7 @@ Software without prior written authorization from Florian GERARD
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include "yggdrasil/framework/Assertion.hpp"
 
 
@@ -38,7 +39,7 @@ namespace framework
 	template<typename UnderLyingType, typename List>
 		class DualLinkNode
 		{
-			
+			friend class T;
 			template<typename T,typename L> friend class DualLinkedList;
 			
 		private:
@@ -91,7 +92,7 @@ namespace framework
 				static_cast<DualLinkNode<UnderLyingType, List>*>(node)->m_next = static_cast<DualLinkNode<UnderLyingType, List>>(next);
 			}
 			
-			static void previous(UnderLyingType node,UnderLyingType* previous)
+			static void previous(UnderLyingType* node,UnderLyingType* previous)
 			{
 				if (node == nullptr)
 					return;
@@ -130,6 +131,10 @@ namespace framework
 			 *if return value is 0 compared and base are equal
 			 *if return value is <0 compared superior to base*/
 			typedef int8_t(*Comparator)(UnderLyingType* base, UnderLyingType* compared);
+			
+			constexpr DualLinkedList() : m_first(nullptr), m_count(0)
+			{
+			}
 			
 			void insert(UnderLyingType* node, Comparator comparator)
 			{
@@ -182,33 +187,73 @@ namespace framework
 					return;
 				}
 			}
-			
-			
-			bool remove(UnderLyingType* node)
+
+			void insertEnd(UnderLyingType *node)
 			{
 				Y_ASSERT(node != nullptr);
-				DualLinkNode<UnderLyingType, List>* newNode = static_cast<DualLinkNode<UnderLyingType,List>*>(node);
-				DualLinkNode<UnderLyingType,List>* iteratorPtr = m_first;
-				uint32_t iteratorCounter = 0;
-				while (iteratorCounter < m_count)
+				Y_ASSERT(!contain(node));
+				DualLinkNode<UnderLyingType, List> *newNode = static_cast<DualLinkNode<UnderLyingType, List> *>(node);
+				newNode->m_next = nullptr;
+				newNode->m_previous = nullptr;
+				if (m_count == 0)
 				{
-					if (iteratorPtr == newNode)
-					{
-						if (iteratorPtr->m_next != nullptr)
-							iteratorPtr->m_next->m_previous = iteratorPtr->m_previous;
-						
-						if (iteratorPtr->m_previous != nullptr)
-							iteratorPtr->m_previous->m_next = iteratorPtr->m_next;
-						
-						iteratorPtr->m_next = nullptr;
-						iteratorPtr->m_previous = nullptr;
-						m_count--;
-						return true;
-					}
-					iteratorPtr = iteratorPtr->m_next;
-					iteratorCounter++; 
+					m_first = newNode;
+					m_count = 1;
+					return;
 				}
-				return false;
+				else
+				{
+					DualLinkNode<UnderLyingType, List> *iterator = m_first;
+					/*Go throught the list until last element*/
+					while (iterator->m_next != nullptr)
+					{
+						iterator = iterator->m_next;
+					}
+					iterator->append(newNode);
+					m_count++;
+					return;
+				}
+			}
+
+			bool remove(UnderLyingType* node)
+			{
+				DualLinkNode < UnderLyingType, List> *iterator;
+				[[maybe_unused]] uint32_t count = 0; // used for debug purposes
+				if(m_first == nullptr){
+					return false;
+				}
+				if (node == m_first)
+				{
+					iterator = m_first;
+					m_first = m_first->m_next;
+					iterator->m_next = nullptr;
+					iterator->m_previous = nullptr;
+					if (m_first != nullptr)
+						m_first->m_previous = nullptr;
+					m_count--;
+					return true;
+				}
+				else
+				{
+					iterator = m_first;
+					while (iterator->m_next != nullptr)
+					{
+						iterator = iterator->m_next;
+						if (iterator == node)
+						{
+							if(iterator->m_next != nullptr)
+								iterator->m_next->m_previous = iterator->m_previous;
+							if(iterator->m_previous != nullptr)
+								(iterator->m_previous)->m_next = iterator->m_next;
+							iterator->m_next = nullptr;
+							iterator->m_previous = nullptr;
+							m_count--;
+							return true;
+						}
+					}
+					return false;
+				}
+				return true;
 			}
 			
 			
@@ -261,9 +306,9 @@ namespace framework
 				}
 			}
 
-			/*UnderLyingType *operator[](uint32_t target)
+			UnderLyingType *operator[](uint32_t target)
 			{
-				UnderLyingType *ptr;
+				DualLinkNode<UnderLyingType, List> *ptr;
 				uint32_t i = 0U;
 					
 				if (target >= this->count())
@@ -272,9 +317,20 @@ namespace framework
 				while (i != target)
 				{
 					ptr = ptr->m_next;
+					i++;
 				}
-				return ptr;
-			}*/
+				return static_cast<UnderLyingType*>(ptr);
+			}
+
+			void foreach (std::function<void(UnderLyingType *)> t_function)
+			{
+				UnderLyingType *ptr = peekFirst();
+				while (ptr != nullptr)
+				{
+					t_function(ptr);
+					ptr = static_cast<UnderLyingType*>(ptr->m_next);
+				}
+			}
 
 			uint32_t count()
 			{
