@@ -219,6 +219,9 @@ namespace framework
 			{
 				DualLinkNode < UnderLyingType, List> *iterator;
 				[[maybe_unused]] uint32_t count = 0; // used for debug purposes
+				if(m_first == nullptr){
+					return false;
+				}
 				if (node == m_first)
 				{
 					iterator = m_first;
