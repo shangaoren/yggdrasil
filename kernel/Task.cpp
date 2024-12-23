@@ -27,17 +27,20 @@
  */
 
 #include "Scheduler.hpp"
-#include "core/Core.hpp"
+#include "../../core/Core.hpp"
 #include "Hooks.hpp"
 
 namespace kernel {
 
-TaskController::StartTaskStub TaskController::startTaskStub = core::Core::supervisorCall<ServiceCall::SvcNumber::startTask, bool, TaskController*>;
-TaskController::StopTaskStub TaskController::stopTaskStub = core::Core::supervisorCall<ServiceCall::SvcNumber::stopTask, bool, TaskController*>;
+TaskController::StartTaskStub TaskController::startTaskStub = core::Core::SupervisorCallHelper<ServiceCall::SvcNumber::startTask, volatile bool (TaskController*)>::call;
+TaskController::StopTaskStub TaskController::stopTaskStub = core::Core::SupervisorCallHelper<ServiceCall::SvcNumber::stopTask, volatile bool(TaskController*)>::call;
 
 bool TaskController::start(TaskFunc function, bool isPrivilegied, uint32_t priority, uint32_t parameter = 0, const char *name = nullptr) {
 	if (m_state != State::notStarted)
 		return false;
+    m_wakeUpTimeStamp = 0;
+    m_waitingFor = nullptr;
+    m_name = name;
 	m_stackPointer = m_stackOrigin + m_stackSize - 18;
 	m_stackOrigin[0] = 0xDEAD;
 	m_stackOrigin[1] = 0xBEEF;
@@ -86,7 +89,14 @@ bool TaskController::start(TaskFunc function, bool isPrivilegied, uint32_t prior
 	__BKPT(0);
 }
 
-bool TaskController::isStackCorrupted() {
+bool TaskController::stop(){
+	if(this->m_state == State::notStarted || this->m_state == State::active)
+		return false;
+	stopTaskStub(this);
+	return true;
+}
+
+bool TaskController::isStackCorrupted() const{
 	if (m_stackOrigin[0] != 0xDEAD)
 		return true;
 	if (m_stackOrigin[1] != 0xBEEF)

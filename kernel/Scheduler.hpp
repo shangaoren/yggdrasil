@@ -86,6 +86,7 @@ namespace kernel
 		/*****************************************************DATA*****************************************************/
 
 		/* Interrupts Variables */
+	public:
 		static uint8_t s_systemPriority;
 		static bool s_interruptInstalled;
 
@@ -101,38 +102,37 @@ namespace kernel
 		static TaskController *volatile s_taskToStack;
 		static volatile bool scheduled;
 		static volatile uint8_t s_lockLevel; // store the level of lock before critical section enters
-		static volatile bool s_isKernelLocked; // indicates if the kernel is in a critical section mode 
+		static volatile bool s_isKernelLocked; // indicates if the kernel is in a critical section mode
 		static uint32_t s_sysTickFreq;
 
 		/* Scheduler misc */
 		static bool s_schedulerStarted;
 		volatile static uint64_t s_ticks;
+	private:
 
 		/****************************************************FUNCTIONS*************************************************/
 
 		//register an Irq, only accessed via service call
 		static bool irqRegister(Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char* name);
-		
-		
+
+
 		//unregister an Irq, only accessed via service call
 		static bool irqUnregister(Irq irq);
-		
-		
+
+
 		/*Lock all interrupt lower or equal of system*/
 		static void enterKernelCriticalSection();
-		
+
 		/*release Interrupt lock*/
 		static void exitKernelCriticalSection();
 
 		//start a task
-		static bool startTask(TaskController &task);
+		static bool startTask(TaskController* task);
 
 		/**
 		 * Look at ready task to see if a context switching is needed
 		 ***/
 		static bool schedule(changeTaskTrigger trigger);
-		static void asmPendSv();
-		static void asmSvcHandler();
 		/*Stop a Task*/
 		static bool stopTask(TaskController *task);
 		//function to sleep a task for a number of ms
@@ -140,19 +140,11 @@ namespace kernel
 		static volatile uint32_t* taskSwitch(uint32_t *stackPosition);
 		//set pendSv, trigger context switch
 		static void setPendSv(changeTaskTrigger trigger);
-		//static void checkStack();
 		static bool inThreadMode();
-		//static void stopWait(interfaces::IWaitable *waitable);
-		//static void wait(interfaces::IWaitable *waitable);
-		//systick handler
 		static void systemTimerTick();
-		static void svcBootstrap();
 		//Svc handler, redirect svc call to the right function
 		static void supervisorCall(ServiceCall::SvcNumber t_service, uint32_t *t_args);
 
-	private:
-		//Function of Idle Task (NOP when NDEBUG is defined, WFI when release)
-		static void idleTaskFunction(uint32_t);
 		static uint64_t getTicks();
 	};
 } // namespace kernel

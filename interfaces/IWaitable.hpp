@@ -20,8 +20,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Except as contained in this notice, the name of Florian GERARD shall not be used 
-in advertising or otherwise to promote the sale, use or other dealings in this 
+Except as contained in this notice, the name of Florian GERARD shall not be used
+in advertising or otherwise to promote the sale, use or other dealings in this
 Software without prior written authorization from Florian GERARD
 
 */
@@ -36,19 +36,16 @@ namespace kernel
 	class TaskController;
 	namespace interfaces
 	{
-		
 		/* Interface to create object with a timeout */
 		class IWaitable
 		{
 			friend class kernel::Scheduler;
-
-		  public:
-
-
-		  private:
+		protected:
 			virtual void stopWait(TaskController* task) = 0;
 
 			virtual void onTimeout(TaskController* task) = 0;
+
+			virtual void abortWait(TaskController* task) = 0;
 
 		}; // class IWaitable
 	}	  // namespace interfaces

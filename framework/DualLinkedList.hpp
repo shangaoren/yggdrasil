@@ -130,7 +130,7 @@ namespace framework
 			 *if return value is >0 compared inferior to base
 			 *if return value is 0 compared and base are equal
 			 *if return value is <0 compared superior to base*/
-			typedef int8_t(*Comparator)(UnderLyingType* base, UnderLyingType* compared);
+			using Comparator = int8_t (*)(const UnderLyingType *base, const UnderLyingType *compared);
 			
 			constexpr DualLinkedList() : m_first(nullptr), m_count(0)
 			{

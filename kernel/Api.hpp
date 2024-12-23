@@ -33,7 +33,7 @@ Software without prior written authorization from Florian GERARD
 #include "Scheduler.hpp"
 #include "ServiceCall.hpp"
 #include "yggdrasil/interfaces/IVectorsManager.hpp"
-#include "core/Core.hpp"
+#include "../../core/Core.hpp"
 #include "Event.hpp"
 
 
@@ -42,153 +42,153 @@ namespace kernel
 	class Api
 	{
 	public:
-		
+
 		/* Prepare Kernel by giving it system core reference and priority level */
-		static inline void setupKernel(uint8_t kernelPriority = 0)
+		static inline void setupKernel(const uint8_t kernelPriority = 0)
 		{
 			return Scheduler::setupKernel(kernelPriority);
 		}
-		
+
 		/* Start Kernel*/
 		static inline bool startKernel()
 		{
 			return Scheduler::startKernel();
 		}
-		
+
 		/*wait without using kernel
 		 *@Warning : will wait until time counter elapsed*/
-		static void wait(uint32_t ms)
+		static void wait(const uint32_t ms)
 		{
 			uint64_t endWaitTimeStamp = Scheduler::s_ticks + ms;
 			while (Scheduler::s_ticks <= endWaitTimeStamp) ;
 		}
-		
+
 		/*set a Task into sleep for an amount of ms
 		 *@Warning: do not call it if you're not in a Task*/
 #ifdef KDEBUG
-		static inline void sleep(uint32_t ticks)
+		static inline void sleep(const uint32_t ticks)
 		{
 			Y_ASSERT(Scheduler::inThreadMode());
-			return core::Core::supervisorCall<ServiceCall::SvcNumber::sleepTask, void, uint32_t>(ticks);
+			core::Core::SupervisorCallHelper<ServiceCall::SvcNumber::sleepTask, void(uint32_t)>::call(ticks);
 		}
 #else
-		const static inline auto &sleep = core::Core::supervisorCall<ServiceCall::SvcNumber::sleepTask, void, uint32_t>;
+		const static inline auto &sleep = core::Core::SupervisorCallHelper<ServiceCall::SvcNumber::sleepTask, void(uint32_t)>::call;
 #endif // KDEBUG
 
-		
+
 
 		/*get kernel timeStamp*/
 		static inline uint64_t getTicks()
 		{
 			return Scheduler::s_ticks;
 		}
-		
+
 		/*register an irq before the scheduler has started*/
-		static void registerIrq(core::interfaces::Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char* name)
+		static void registerIrq(const core::interfaces::Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char* name)
 		{
 			if (Scheduler::s_interruptInstalled == false)
 				Scheduler::installKernelInterrupt();
-			registerIrqKernel(irq, handler,name);	
+			registerIrqKernel(irq, handler,name);
 		}
-		
-		
+
+
 		/*unregister an irq before the scheduler has started*/
-		static void unregisterIrq(core::interfaces::Irq irq)
+		static void unregisterIrq(const core::interfaces::Irq irq)
 		{
 			if (Scheduler::s_interruptInstalled == false)
 				Scheduler::installKernelInterrupt();
 			unRegisterIrqKernel(irq);
 		}
-		
+
 
 		/*Setup an Irq Priority*/
-		static inline void irqPriority(core::interfaces::Irq irq, uint8_t preEmpt, uint8_t sub)
+		static inline void irqPriority(const core::interfaces::Irq irq,const uint8_t preEmpt, const uint8_t sub)
 		{
 			if (Scheduler::s_interruptInstalled == false)
 				Scheduler::installKernelInterrupt();
 			irqPriorityKernel(irq,preEmpt,sub);
 		}
 
-		static inline void irqPriority(core::interfaces::Irq irq, uint8_t priority)
+		static inline void irqPriority(const core::interfaces::Irq irq, const uint8_t priority)
 		{
-			Y_ASSERT(priority >= Scheduler::s_systemPriority);
+			//Y_ASSERT(priority >= Scheduler::s_systemPriority); // should be a warning
 			if (Scheduler::s_interruptInstalled == false)
 				Scheduler::installKernelInterrupt();
 			irqGlobalPriorityKernel(irq,priority);
 		}
 
 		/*Enable an Irq in NVIC*/
-		static inline void enableIrq(core::interfaces::Irq irq)
+		static inline void enableIrq(const core::interfaces::Irq irq)
 		{
 			if (Scheduler::s_interruptInstalled == false)
 				Scheduler::installKernelInterrupt();
-			core::Core::supervisorCall < ServiceCall::SvcNumber::enableIrq, void, core::interfaces::Irq>(irq);
+			core::Core::SupervisorCallHelper < ServiceCall::SvcNumber::enableIrq, void(core::interfaces::Irq)>::call(irq);
 		}
 
 		/*Disable an Irq in NVIC*/
-		static inline void disableIrq(core::interfaces::Irq irq)
+		static inline void disableIrq(const core::interfaces::Irq irq)
 		{
 			if (Scheduler::s_interruptInstalled == false)
 				Scheduler::installKernelInterrupt();
-			core::Core::supervisorCall < ServiceCall::SvcNumber::disableIrq, void, core::interfaces::Irq>(irq);
+			core::Core::SupervisorCallHelper< ServiceCall::SvcNumber::disableIrq, void(core::interfaces::Irq)>::call(irq);
 		}
 
 		/*Clear a pending Irq*/
-		static inline void clearIrq(core::interfaces::Irq irq)
+		static inline void clearIrq(const core::interfaces::Irq irq)
 		{
 			if (Scheduler::s_interruptInstalled)
 				Scheduler::installKernelInterrupt();
-			core::Core::supervisorCall < ServiceCall::SvcNumber::clearIrq, void, core::interfaces::Irq>(irq);
+			core::Core::SupervisorCallHelper < ServiceCall::SvcNumber::clearIrq, void(core::interfaces::Irq)>::call(irq);
 		}
-		
-		static inline void setupInterrupt(core::interfaces::Irq irq, core::interfaces::IVectorManager::IrqHandler handler, uint8_t priority, const char* name = nullptr)
+
+		static inline void setupInterrupt(const core::interfaces::Irq irq, core::interfaces::IVectorManager::IrqHandler handler,const uint8_t priority, const char* name = nullptr)
 		{
 			registerIrq(irq, handler, name);
 			irqPriority(irq, priority);
 			clearIrq(irq);
 			enableIrq(irq);
 		}
-		
-		static inline void setupInterrupt(core::interfaces::Irq irq, core::interfaces::IVectorManager::IrqHandler handler, uint8_t preEmpt, uint8_t sub, const char* name = nullptr)
+
+		static inline void setupInterrupt(const core::interfaces::Irq irq, const core::interfaces::IVectorManager::IrqHandler handler, const uint8_t preEmpt, const uint8_t sub, const char* name = nullptr)
 		{
 			registerIrq(irq, handler, name);
 			irqPriority(irq, preEmpt, sub);
 			clearIrq(irq);
 			enableIrq(irq);
 		}
-		
+
 		/*Lock every interrupts below System*/
-		static const inline auto& enterCriticalSection = core::Core::supervisorCall<ServiceCall::SvcNumber::enterCriticalSection, void>;
-	
+		static const inline auto& enterCriticalSection = core::Core::SupervisorCallHelper<ServiceCall::SvcNumber::enterCriticalSection, void()>::call;
+
 		/*Unlock Interrupts*/
-		static const inline auto& exitCriticalSection = core::Core::supervisorCall<ServiceCall::SvcNumber::exitCriticalSection, void>;
+		static const inline auto& exitCriticalSection = core::Core::SupervisorCallHelper<ServiceCall::SvcNumber::exitCriticalSection, void()>::call;
 	private:
 		/* Register an interrupt */
 		//@return true if success, false otherwise
 		//@params irq to register, irqHandler to use when irq is triggered, const char* name of irq
 
-		static const inline auto& registerIrqKernel = 
-			core::Core::supervisorCall<ServiceCall::SvcNumber::registerIrq, bool, core::interfaces::Irq, core::interfaces::IVectorManager::IrqHandler, const char*>;
-		
+		static const inline auto& registerIrqKernel =
+			core::Core::SupervisorCallHelper<ServiceCall::SvcNumber::registerIrq, bool(core::interfaces::Irq, core::interfaces::IVectorManager::IrqHandler, const char*)>::call;
+
 		// unregister an irq (will replace by default handler), the irq should not be called again
 		//@return true if success, false otherwise
 		//@params irq to unregister
 
-		static const inline auto& unRegisterIrqKernel = 
-			core::Core::supervisorCall < ServiceCall::SvcNumber::unregisterIrq, bool, core::interfaces::Irq>; 
+		static const inline auto& unRegisterIrqKernel =
+			core::Core::SupervisorCallHelper<ServiceCall::SvcNumber::unregisterIrq, bool(Irq)>::call;
 
 		// set global irq Priority (ignore subpriority/ preempt splitting)
 		//@return no return
 		//@params irq to setup, priority to give
 
-		static const inline auto& irqGlobalPriorityKernel = 
-			core::Core::supervisorCall < ServiceCall::SvcNumber::setGlobalPriority,void, core::interfaces::Irq, uint8_t>;
+		static const inline auto& irqGlobalPriorityKernel =
+			core::Core::SupervisorCallHelper<ServiceCall::SvcNumber::setGlobalPriority, void(core::interfaces::Irq, uint8_t)>::call;
 
-		
+
 		// set irq Priority whith priority and subpriority
 		//@return no return
 		//@params irq to setup, preempt priority, sub priority
-		static const inline auto& irqPriorityKernel = 
-			core::Core::supervisorCall < ServiceCall::SvcNumber::setPriority, void, core::interfaces::Irq, uint8_t, uint8_t>;
+		static const inline auto& irqPriorityKernel =
+			core::Core::SupervisorCallHelper<ServiceCall::SvcNumber::setPriority, void(core::interfaces::Irq, uint8_t, uint8_t)>::call;
 	};
 	}

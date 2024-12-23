@@ -54,6 +54,7 @@ namespace kernel
 			sleepTask,
 			signalEvent,
 			waitEvent,
+			deleteEvent,
 			enterCriticalSection,
 			exitCriticalSection,
 			mutexLock,

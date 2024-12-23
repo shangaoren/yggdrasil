@@ -27,25 +27,31 @@ Software without prior written authorization from Florian GERARD
 */
 
 #include "Event.hpp"
+
+#include <cassert>
+
 #include "Scheduler.hpp"
-#include "core/Core.hpp"
+#include "../../core/Core.hpp"
 #include "Hooks.hpp"
 
 namespace kernel
 {
+
+	Event::~Event() {
+		serviceCallEventDelete(this);
+	}
 	//Task rise an event
 	bool Event::kernelSignalEvent(Event* event)
 	{
-		Y_ASSERT(event != nullptr);
+		assert(event != nullptr);
 		kernel::Hooks::onEventTrigger(event);
 		if (event->m_waiter != nullptr)
 		{
 			TaskController* newReadyTask = event->m_waiter;
 			event->m_waiter = nullptr;
-			Y_ASSERT(!Scheduler::s_ready.contain(newReadyTask)); //If the event ready task is already in ready list, we have a problem
+			assert(!Scheduler::s_ready.contain(newReadyTask)); //If the event ready task is already in ready list, we have a problem
 			newReadyTask->m_waitingFor = nullptr;
 			event->stopWait(newReadyTask);
-			Y_ASSERT(!Scheduler::s_waiting.contain(newReadyTask)); 
 			Scheduler::s_ready.insert(newReadyTask, TaskController::priorityCompare);
 			newReadyTask->m_state = kernel::TaskController::State::ready;
 			kernel::Hooks::onTaskReady(newReadyTask);
@@ -55,13 +61,13 @@ namespace kernel
 			event->m_isRaised = true;
 		return true;
 	}
-		
-		
+
+
 	//A task ask to wait for an event
 	// return 1 if wait success, 0 if unable to wait, -1 if timeout
 	int16_t Event::kernelWaitEvent(Event* event, uint32_t duration)
 	{
-		if (event->m_isRaised)	//event already rised, return
+		if (event->m_isRaised)	//event already raised, return
 		{
 			event->m_isRaised = false;
 			return 1;
@@ -83,38 +89,55 @@ namespace kernel
 			Scheduler::s_activeTask->m_state = TaskController::State::waitingEvent;		   //sets active task as waiting
 			Scheduler::s_taskToStack = Scheduler::s_activeTask;
 			Scheduler::s_activeTask = Scheduler::s_ready.getFirst();
+			Y_ASSERT(Scheduler::s_activeTask != nullptr);
 			Hooks::onTaskWaitEvent(Scheduler::s_taskToStack, event);
 			Scheduler::setPendSv(kernel::Scheduler::changeTaskTrigger::waitForEvent);
 			return 1;
-		}		
+		}
 	}
-	
+
 	int16_t Event::wait(uint32_t duration)
 	{
 		Y_ASSERT(Scheduler::inThreadMode());
 		return serviceCallEventWait(this, duration);
 	}
-	
+
+	void Event::kernelDeleteEvent(Event *event) {
+		if (event->m_waiter != nullptr) {
+			TaskController* newReadyTask = event->m_waiter;
+			event->m_waiter = nullptr;
+			assert(!Scheduler::s_ready.contain(newReadyTask)); //If the event ready task is already in ready list, we have a problem
+			newReadyTask->m_waitingFor = nullptr;
+			event->stopWait(newReadyTask);
+			Scheduler::s_ready.insert(newReadyTask, TaskController::priorityCompare);
+			newReadyTask->m_state = kernel::TaskController::State::ready;
+			newReadyTask->setReturnValue(static_cast<int16_t>(-1));
+			kernel::Hooks::onTaskReady(newReadyTask);
+			Scheduler::schedule(kernel::Scheduler::changeTaskTrigger::wakeByEvent);
+		}
+	}
+
+
 	bool Event::signal()
 	{
 		serviceCallEventSignal(this);
 		return true;
 	}
-		
-	bool Event::someoneWaiting()
+
+	bool Event::someoneWaiting() const
 	{
 		if (m_waiter != nullptr)
 			return true;
 		else
 			return false;
 	}
-	
+
 	void Event::reset()
 	{
 		m_isRaised = false;
 	}
-	
-	bool Event::isAlreadyUp()
+
+	bool Event::isAlreadyUp() const
 	{
 		return m_isRaised;
 	}
@@ -126,13 +149,13 @@ namespace kernel
 			Scheduler::s_waiting.remove(task);
 			task->m_wakeUpTimeStamp = 0;
 		}
-		
+
 	}
 	void Event::onTimeout(TaskController* task)
 	{
 		Hooks::onEventTimeout(this);
-		Y_ASSERT(task == m_waiter);
-		Y_ASSERT(task != nullptr);
+		assert(task == m_waiter);
+		assert(task != nullptr);
 		m_waiter = nullptr; // no more task waiting the event
 		task->m_waitingFor = nullptr; //the task is no more waiting for event
 		task->setReturnValue(static_cast<int16_t>(-1));
@@ -142,8 +165,16 @@ namespace kernel
 		Hooks::onTaskReady(task);
 		Scheduler::schedule(kernel::Scheduler::changeTaskTrigger::wakeByEvent);
 	}
-	
-	Event::SupervisorEventWait Event::serviceCallEventWait = core::Core::supervisorCall<ServiceCall::SvcNumber::waitEvent, int16_t, Event*, uint32_t>;
-	Event::SupervisorEventSignal Event::serviceCallEventSignal = core::Core::supervisorCall<ServiceCall::SvcNumber::signalEvent, bool, Event*>;
-}// End namespace kernel
+    void Event::abortWait(kernel::TaskController *task) {
+        if(m_waiter == task){
+            m_waiter = nullptr;
+            stopWait(task);
+            task->m_waitingFor = nullptr;
+        }
+    }
+
+	Event::SupervisorEventWait Event::serviceCallEventWait = core::Core::SupervisorCallHelper<ServiceCall::SvcNumber::waitEvent,int16_t(Event*, uint32_t)>::call;
+	Event::SupervisorEventSignal Event::serviceCallEventSignal = core::Core::SupervisorCallHelper<ServiceCall::SvcNumber::signalEvent,bool (Event*)>::call;
+	Event::SupervisorEventDelete Event::serviceCallEventDelete = core::Core::SupervisorCallHelper<ServiceCall::SvcNumber::deleteEvent, void(Event*)>::call;
+}
 

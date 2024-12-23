@@ -42,58 +42,62 @@ namespace kernel
 	{
 		friend class Scheduler; //let Scheduler access private function but no one else
 	public:
-		
-		constexpr Event(bool isRaised = false, const char*name = nullptr) :m_waiter(nullptr), m_isRaised(isRaised), m_name(name)
+		constexpr explicit Event(const char*name = nullptr) :m_waiter(nullptr), m_isRaised(false), m_name(name)
 		{
 		}
-		
-		
-		~Event()
-		{
-			
-		}
-		
-		static bool kernelSignalEvent(Event* event);
-		static int16_t kernelWaitEvent(Event* event, uint32_t duration);
-		
-		
-				
+
+		Event(const Event &) = delete;
+		Event(Event &&) = delete;
+
+		Event &operator=(Event &&) = delete;
+		Event &operator=(const Event &) = delete;
+		virtual ~Event();
+
+
 		//wait for an event, used by Scheduler
 		//first task to wait is first task to be served
 		//@parameter Task waiting for the event
 		//return true if the task is waiting,
 		//false if event is already rised
-		int16_t wait(uint32_t duration = 0);
-		
-		
-		//Signal that an event occured
+		int16_t wait(uint32_t duration);
+
+
+		//Signal that an event occurred
 		//if a task is already waiting then return it to wake it up
 		//else rise event and return nullptr
 		bool signal();
-		
-		bool someoneWaiting();
 
-		bool isAlreadyUp();
+		[[nodiscard]] bool someoneWaiting() const;
+
+		[[nodiscard]] bool isAlreadyUp() const ;
 
 		void reset();
-
+    protected:
 		void stopWait(TaskController* task) final;
 		void onTimeout(TaskController* task) final;
+        void abortWait(TaskController* task) final;
+
+		static bool kernelSignalEvent(Event* event);
+		static int16_t kernelWaitEvent(Event* event, uint32_t duration);
+		static void kernelDeleteEvent(Event* event);
 
 	  private:
-		
+
 		//------------------PRIVATE DATA------------------------
 		TaskController* volatile m_waiter;
 		bool m_isRaised;
 		const char *m_name;
 
 		//------------------PRIVATE FUNCTIONS---------------------
-		
+
 		using SupervisorEventWait = int16_t(&)(Event*, uint32_t);
 		static SupervisorEventWait& serviceCallEventWait;
-		
+
 		using SupervisorEventSignal = bool(&)(Event*);
 		static SupervisorEventSignal& serviceCallEventSignal;
+
+		using SupervisorEventDelete = void(&)(Event*);
+		static SupervisorEventDelete& serviceCallEventDelete;
 	
 		};
 	

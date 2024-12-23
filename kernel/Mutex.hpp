@@ -65,23 +65,23 @@ namespace kernel
 		void onTimeout(TaskController* task);
 		
 		// call kernel to lock mutex
-		//@return int16_t, 1 if when succes, -1 if timeout, 0 if error
+		//@return int16_t, 1 if when success, -1 if timeout, 0 if error
 		//@params pointer to mutex to lock, optional timeout (0 to disable)
 		using SupervisorCallLockMutex = int16_t(&)(Mutex*, uint32_t);
 		static SupervisorCallLockMutex& supervisorCallLockMutex;
-		
+
 		// call kernel to unlock mutex
 		//@return bool, true if success, false otherwise
 		//@params pointer to mutex to unlock
 		using SupervisorCallReleaseMutex = bool(&)(Mutex*);
 		static SupervisorCallReleaseMutex& supervisorCallReleaseMutex;
 	};
-	
+
 template<class ObjectType>
 	class ObjectMutex
 	{
 	public:
-		constexpr ObjectMutex(ObjectType& object) : m_object(object), m_mutex()
+		explicit constexpr ObjectMutex(ObjectType& object) : m_object(object), m_mutex()
 		{
 			
 		}
