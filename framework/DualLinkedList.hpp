@@ -31,7 +31,7 @@ Software without prior written authorization from Florian GERARD
 
 #include <cstdint>
 #include <functional>
-#include "yggdrasil/framework/Assertion.hpp"
+#include "yggdrasil/framework/assert.hpp"
 
 
 namespace framework
@@ -130,7 +130,7 @@ namespace framework
 			 *if return value is >0 compared inferior to base
 			 *if return value is 0 compared and base are equal
 			 *if return value is <0 compared superior to base*/
-			typedef int8_t(*Comparator)(UnderLyingType* base, UnderLyingType* compared);
+			using Comparator = int8_t (*)(const UnderLyingType *base, const UnderLyingType *compared);
 			
 			constexpr DualLinkedList() : m_first(nullptr), m_count(0)
 			{
@@ -139,7 +139,7 @@ namespace framework
 			void insert(UnderLyingType* node, Comparator comparator)
 			{
 
-				Y_ASSERT(node != nullptr);
+				y_assert(node != nullptr);
 				DualLinkNode<UnderLyingType, List>* newNode = static_cast<DualLinkNode<UnderLyingType, List>*>(node);
 				newNode->m_next = nullptr;
 				newNode->m_previous = nullptr;
@@ -190,8 +190,8 @@ namespace framework
 
 			void insertEnd(UnderLyingType *node)
 			{
-				Y_ASSERT(node != nullptr);
-				Y_ASSERT(!contain(node));
+				y_assert(node != nullptr);
+				y_assert(!contain(node));
 				DualLinkNode<UnderLyingType, List> *newNode = static_cast<DualLinkNode<UnderLyingType, List> *>(node);
 				newNode->m_next = nullptr;
 				newNode->m_previous = nullptr;
@@ -257,12 +257,9 @@ namespace framework
 			}
 			
 			
-			bool isEmpty()
+			bool isEmpty() const
 			{
-				if (m_count == 0)
-					return true;
-				else
-					return false;
+				return m_count == 0 ? true : false;
 			}
 			
 			bool contain(UnderLyingType* node)
@@ -332,7 +329,7 @@ namespace framework
 				}
 			}
 
-			uint32_t count()
+			uint32_t count() const
 			{
 				return m_count;
 			}

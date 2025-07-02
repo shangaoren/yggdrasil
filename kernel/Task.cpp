@@ -25,19 +25,20 @@
  Software without prior written authorization from Florian GERARD
 
  */
-
-#include "Scheduler.hpp"
-#include "core/Core.hpp"
+#include "../YggdrasilConfig.hpp"
 #include "Hooks.hpp"
 
 namespace kernel {
 
-TaskController::StartTaskStub TaskController::startTaskStub = core::Core::supervisorCall<ServiceCall::SvcNumber::startTask, bool, TaskController*>;
-TaskController::StopTaskStub TaskController::stopTaskStub = core::Core::supervisorCall<ServiceCall::SvcNumber::stopTask, bool, TaskController*>;
+TaskController::StartTaskStub TaskController::startTaskStub = Core::SupervisorCallHelper<ServiceCall::SvcNumber::startTask, bool (TaskController*)>::call;
+TaskController::StopTaskStub TaskController::stopTaskStub = Core::SupervisorCallHelper<ServiceCall::SvcNumber::stopTask, bool(TaskController*)>::call;
 
 bool TaskController::start(TaskFunc function, bool isPrivilegied, uint32_t priority, uint32_t parameter = 0, const char *name = nullptr) {
 	if (m_state != State::notStarted)
 		return false;
+    m_wakeUpTimeStamp = 0;
+    m_waitingFor = nullptr;
+    m_name = name;
 	m_stackPointer = m_stackOrigin + m_stackSize - 18;
 	m_stackOrigin[0] = 0xDEAD;
 	m_stackOrigin[1] = 0xBEEF;
@@ -68,25 +69,30 @@ bool TaskController::start(TaskFunc function, bool isPrivilegied, uint32_t prior
 	m_stackPointer[2] = 4;						//R4
 	m_stackPointer[1] = 0x2 | !isPrivilegied; //CONTROL, initial value, unprivileged, use PSP, no Floating Point
 	m_stackPointer[0] = 0xFFFFFFFD;	//LR, return from exception, 8 Word Stack Length (no floating point), return in thread mode, use PSP
-	if (!Scheduler::s_interruptInstalled)
-		Scheduler::installKernelInterrupt();
 	m_priority = priority;
 	startTaskStub(this);
 	return true;
 }
 
 
-[[no_return]] void TaskController::taskWrapper(TaskController &task, TaskFunc func, uint32_t parameter) {
+void TaskController::taskWrapper(TaskController &task, TaskFunc func, uint32_t parameter) {
 	(*func)(parameter);
 	stopTaskStub(&task);
-	__BKPT(0);
+	Core::breakpoint();
 }
 
-[[no_return]] void TaskController::taskFinished() {
-	__BKPT(0);
+ void TaskController::taskFinished() {
+	Core::breakpoint();
 }
 
-bool TaskController::isStackCorrupted() {
+bool TaskController::stop(){
+	if(this->m_state == State::notStarted || this->m_state == State::active)
+		return false;
+	stopTaskStub(this);
+	return true;
+}
+
+bool TaskController::isStackCorrupted() const{
 	if (m_stackOrigin[0] != 0xDEAD)
 		return true;
 	if (m_stackOrigin[1] != 0xBEEF)

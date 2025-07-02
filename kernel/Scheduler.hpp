@@ -28,131 +28,79 @@ Software without prior written authorization from Florian GERARD
 
 #pragma once
 
-#include "Event.hpp"
-#include "Mutex.hpp"
-#include "ServiceCall.hpp"
 #include "Task.hpp"
-#include <array>
+#include "../YggdrasilConfig.hpp"
+#include "ServiceCall.hpp"
 
-#include "yggdrasil/framework/Assertion.hpp"
-#include "yggdrasil/framework/DualLinkedList.hpp"
-#include "yggdrasil/interfaces/IVectorsManager.hpp"
-#include "yggdrasil/interfaces/IWaitable.hpp"
-#include "yggdrasil/framework/DualLinkedList.hpp"
-#include "yggdrasil/framework/Assertion.hpp"
+namespace kernel {
+    class Scheduler {
+        friend class SystemView;
+        friend class TaskController;
+        friend class Event;
+        friend class Mutex;
+        friend class Yggdrasil;
+        friend Core;
+
+    private:
+
+        /*****************************************************DATA*****************************************************/
+
+        /* Tasks Lists */
+        static ReadyList s_ready;
+        static SleepingList s_sleeping;
+        static StartedList s_started;
+        static WaitableList s_waiting;
+
+        /* Task Related Variables */
+        static TaskController *volatile s_activeTask;
+        static TaskController *volatile s_taskToStack;
+        static volatile bool scheduled;
+        static volatile uint8_t s_lockLevel; // store the level of lock before critical section enters
+        static volatile bool s_isKernelLocked; // indicates if the kernel is in a critical section mode
+
+        /* Scheduler misc */
+        static bool s_schedulerStarted;
+        volatile static uint64_t s_ticks;
+
+        /****************************************************FUNCTIONS*************************************************/
 
 
-namespace core
-{
-	class Core;
-}
-namespace kernel
-{
-	using namespace core::interfaces;
-	class Scheduler
-	{
-		friend class ServiceCall;
-		friend class Api;
-		friend class SystemView;
-		friend class TaskController;
-		friend class Mutex;
-		friend class Event;
-		friend class ::core::Core;
+        /*Lock all interrupt lower or equal of system*/
+        static void enterKernelCriticalSection();
 
-	  private:
-		enum class changeTaskTrigger : uint32_t
-		{
-			enterSleep = 0,
-			exitSleep = 1,
-			waitForEvent = 2,
-			wakeByEvent = 3,
-			taskStarted = 4,
-			taskStopped = 5,
-			waitForMutex = 6,
-			wakeByMutex = 7,
-			eventTimeout = 8,
-			mutexTimeout = 9,
-			none = 20,
-		};
+        /*release Interrupt lock*/
+        static void exitKernelCriticalSection();
 
-		static void setupKernel(uint8_t systemPriority);
+        //start a task
+        static bool startTask(TaskController *task);
 
-		static bool startKernel();
+        static const uint32_t volatile *getStackPointer(const TaskController *task);
 
-		static bool installKernelInterrupt();
+        /**
+         * Look at ready task to see if a context switching is needed
+         ***/
+        static bool maybeSwitchTask();
 
-		static bool startFirstTask();
+        /*Stop a Task*/
+        static bool stopTask(TaskController *task);
 
-		/*****************************************************DATA*****************************************************/
+        //function to sleep a task for a number of ms
+        static bool sleep(uint32_t ms);
 
-		/* Interrupts Variables */
-		static uint8_t s_systemPriority;
-		static bool s_interruptInstalled;
+        static volatile uint32_t *taskSwitch(uint32_t *stackPosition);
 
-		/* Tasks Lists */
-		static ReadyList s_ready;
-		static SleepingList s_sleeping;
-		static StartedList s_started;
-		static WaitableList s_waiting;
+        static void triggerSwitch();
 
-		/* Task Related Variables */
-		static volatile changeTaskTrigger s_trigger;
-		static TaskController *volatile s_activeTask;
-		static TaskController *volatile s_taskToStack;
-		static volatile bool scheduled;
-		static volatile uint8_t s_lockLevel; // store the level of lock before critical section enters
-		static volatile bool s_isKernelLocked; // indicates if the kernel is in a critical section mode 
-		static uint32_t s_sysTickFreq;
+        static void systemTimerTick();
 
-		/* Scheduler misc */
-		static bool s_schedulerStarted;
-		volatile static uint64_t s_ticks;
+        static void supervisorCall(ServiceCall::SvcNumber service, uint32_t *t_args);
 
-		/****************************************************FUNCTIONS*************************************************/
+        static bool __attribute__((aligned(4), optimize("O0"))) startFirstTask();
 
-		//register an Irq, only accessed via service call
-		static bool irqRegister(Irq irq, core::interfaces::IVectorManager::IrqHandler handler, const char* name);
-		
-		
-		//unregister an Irq, only accessed via service call
-		static bool irqUnregister(Irq irq);
-		
-		
-		/*Lock all interrupt lower or equal of system*/
-		static void enterKernelCriticalSection();
-		
-		/*release Interrupt lock*/
-		static void exitKernelCriticalSection();
+    public:
+        static bool inThreadMode();
 
-		//start a task
-		static bool startTask(TaskController &task);
-
-		/**
-		 * Look at ready task to see if a context switching is needed
-		 ***/
-		static bool schedule(changeTaskTrigger trigger);
-		static void asmPendSv();
-		static void asmSvcHandler();
-		/*Stop a Task*/
-		static bool stopTask(TaskController *task);
-		//function to sleep a task for a number of ms
-		static bool sleep(uint32_t ms);
-		static volatile uint32_t* taskSwitch(uint32_t *stackPosition);
-		//set pendSv, trigger context switch
-		static void setPendSv(changeTaskTrigger trigger);
-		//static void checkStack();
-		static bool inThreadMode();
-		//static void stopWait(interfaces::IWaitable *waitable);
-		//static void wait(interfaces::IWaitable *waitable);
-		//systick handler
-		static void systemTimerTick();
-		static void svcBootstrap();
-		//Svc handler, redirect svc call to the right function
-		static void supervisorCall(ServiceCall::SvcNumber t_service, uint32_t *t_args);
-
-	private:
-		//Function of Idle Task (NOP when NDEBUG is defined, WFI when release)
-		static void idleTaskFunction(uint32_t);
-		static uint64_t getTicks();
-	};
+        static uint64_t getTicks();
+        static bool isStarted();
+    };
 } // namespace kernel

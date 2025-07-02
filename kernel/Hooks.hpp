@@ -1,11 +1,12 @@
 #pragma once
-#include "yggdrasil/kernel/Event.hpp"
-#include "yggdrasil/kernel/Mutex.hpp"
-#include "yggdrasil/kernel/Task.hpp"
-#include "yggdrasil/interfaces/IWaitable.hpp"
+#include "yggdrasil/kernel/Waitable.hpp"
 
 namespace kernel
 {
+	class Mutex;
+	class Event;
+	class TaskController;
+
 	class Hooks
 	{
 	  public:

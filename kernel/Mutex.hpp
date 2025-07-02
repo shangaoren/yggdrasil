@@ -27,17 +27,13 @@ Software without prior written authorization from Florian GERARD
 */
 
 #pragma once
-
 #include "Task.hpp"
-#include "ServiceCall.hpp"
-#include "yggdrasil/interfaces/IWaitable.hpp"
+#include "yggdrasil/kernel/Waitable.hpp"
 
 
 namespace kernel
 {
-	
-	
-	class Mutex : public interfaces::IWaitable
+	class Mutex final: public Waitable
 	{
 		friend class Scheduler;
 	public:
@@ -46,14 +42,16 @@ namespace kernel
 		{
 		}
 
-		/* try to lock ressource, 
-		 * -timeout specify a time in ms to wait for ressoure, 0 for no timeout 
+		/* try to lock resource,
+		 * timeout specify a time in ms to wait for resource, 0 for no timeout
 		 * return 1 if wait success, 0 if unable to wait, -1 if timeout*/	
 		int16_t lock(uint32_t timeout = 0);
 		
 		bool release();
 		
-		bool isLocked();
+		[[nodiscard]] bool isLocked() const;
+
+		void abortWait(TaskController *task) override;
 		
 	private:
 		EventList m_waiting;
@@ -61,55 +59,19 @@ namespace kernel
 
 		static int16_t kernelLockMutex(Mutex* mutex, uint32_t duration);
 		static bool kernelReleaseMutex(Mutex* mutex);
-		void stopWait(TaskController *task);
-		void onTimeout(TaskController* task);
+		void stopWait(TaskController *task) override;
+		void onTimeout(TaskController* task) override;
 		
 		// call kernel to lock mutex
-		//@return int16_t, 1 if when succes, -1 if timeout, 0 if error
+		//@return int16_t, 1 if when success, -1 if timeout, 0 if error
 		//@params pointer to mutex to lock, optional timeout (0 to disable)
 		using SupervisorCallLockMutex = int16_t(&)(Mutex*, uint32_t);
 		static SupervisorCallLockMutex& supervisorCallLockMutex;
-		
+
 		// call kernel to unlock mutex
 		//@return bool, true if success, false otherwise
 		//@params pointer to mutex to unlock
 		using SupervisorCallReleaseMutex = bool(&)(Mutex*);
 		static SupervisorCallReleaseMutex& supervisorCallReleaseMutex;
-	};
-	
-template<class ObjectType>
-	class ObjectMutex
-	{
-	public:
-		constexpr ObjectMutex(ObjectType& object) : m_object(object), m_mutex()
-		{
-			
-		}
-		
-		// Obtain a pointer to the object protected by mutex, or nullptr if timeout expired
-		ObjectType* get(uint32_t timeout = 0)
-		{
-			if (m_mutex.lock(timeout) == 1)
-				return &m_object;
-			else
-				return nullptr;
-		}
-		
-		// release the Object by giving the pointer back, the pointer will be nullptr if success
-		bool release(ObjectType* &object)
-		{
-			if (object != &m_object)	// check that the given object is really the object protected by mutex
-				return false;
-			if (m_mutex.release())
-			{
-				object = nullptr;
-				return true;
-			}
-			return false;
-		}
-	private:
-
-		ObjectType& m_object;
-		Mutex m_mutex;
 	};
 	}

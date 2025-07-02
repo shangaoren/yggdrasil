@@ -31,69 +31,72 @@ Software without prior written authorization from Florian GERARD
 #include <cstdint>
 
 #include "Task.hpp" 
-#include "ServiceCall.hpp"
-#include "yggdrasil/interfaces/IWaitable.hpp"
+#include "yggdrasil/kernel/Waitable.hpp"
 
 
 namespace kernel
 {
 	
-	class Event : public interfaces::IWaitable
+	class Event final: public Waitable
 	{
 		friend class Scheduler; //let Scheduler access private function but no one else
 	public:
-		
-		constexpr Event(bool isRaised = false, const char*name = nullptr) :m_waiter(nullptr), m_isRaised(isRaised), m_name(name)
+		constexpr explicit Event(const char*name = nullptr) :m_waiter(nullptr), m_isRaised(false), m_name(name)
 		{
 		}
-		
-		
-		~Event()
-		{
-			
-		}
-		
-		static bool kernelSignalEvent(Event* event);
-		static int16_t kernelWaitEvent(Event* event, uint32_t duration);
-		
-		
-				
+
+		Event(const Event &) = delete;
+		Event(Event &&) = delete;
+
+		Event &operator=(Event &&) = delete;
+		Event &operator=(const Event &) = delete;
+		virtual ~Event();
+
+
 		//wait for an event, used by Scheduler
 		//first task to wait is first task to be served
 		//@parameter Task waiting for the event
 		//return true if the task is waiting,
-		//false if event is already rised
-		int16_t wait(uint32_t duration = 0);
-		
-		
-		//Signal that an event occured
+		//false if event is already risen
+		int16_t wait(uint32_t duration);
+
+
+		//Signal that an event occurred
 		//if a task is already waiting then return it to wake it up
 		//else rise event and return nullptr
 		bool signal();
-		
-		bool someoneWaiting();
 
-		bool isAlreadyUp();
+		[[nodiscard]] bool someoneWaiting() const;
+
+		[[nodiscard]] bool isAlreadyUp() const ;
 
 		void reset();
+    protected:
+		void stopWait(TaskController* task) override;
+		void onTimeout(TaskController* task) override;
+        void abortWait(TaskController* task) override;
 
-		void stopWait(TaskController* task) final;
-		void onTimeout(TaskController* task) final;
+		static bool kernelSignalEvent(Event* event);
+		static int16_t kernelWaitEvent(Event* event, uint32_t duration);
+		static void kernelDeleteEvent(Event* event);
 
 	  private:
-		
+
 		//------------------PRIVATE DATA------------------------
 		TaskController* volatile m_waiter;
 		bool m_isRaised;
 		const char *m_name;
 
 		//------------------PRIVATE FUNCTIONS---------------------
-		
+
 		using SupervisorEventWait = int16_t(&)(Event*, uint32_t);
 		static SupervisorEventWait& serviceCallEventWait;
-		
+
 		using SupervisorEventSignal = bool(&)(Event*);
 		static SupervisorEventSignal& serviceCallEventSignal;
+
+		using SupervisorEventDelete = void(&)(Event*);
+		static SupervisorEventDelete& serviceCallEventDelete;
 	
 		};
 	

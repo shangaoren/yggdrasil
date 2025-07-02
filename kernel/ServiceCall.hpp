@@ -27,8 +27,6 @@ Software without prior written authorization from Florian GERARD
 */
 
 #pragma once
-
-
 #include <cstdint>
 
 namespace kernel
@@ -36,7 +34,6 @@ namespace kernel
 	class ServiceCall
 	{
 		friend class Api;
-		
 	public:
 		
 		enum class SvcNumber : uint8_t
@@ -54,6 +51,7 @@ namespace kernel
 			sleepTask,
 			signalEvent,
 			waitEvent,
+			deleteEvent,
 			enterCriticalSection,
 			exitCriticalSection,
 			mutexLock,

@@ -20,27 +20,28 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Except as contained in this notice, the name of Florian GERARD shall not be used 
-in advertising or otherwise to promote the sale, use or other dealings in this 
+Except as contained in this notice, the name of Florian GERARD shall not be used
+in advertising or otherwise to promote the sale, use or other dealings in this
 Software without prior written authorization from Florian GERARD
 
 */
-
-
 #pragma once
-#include <cstdint>
-#include "yggdrasil/interfaces/IVectorsManager.hpp"
 
-namespace core
+namespace kernel
 {
-	namespace interfaces
-	{
-		class ISystemTimer
+	//Forward Declaration
+	class Scheduler;
+	class TaskController;
+		class Waitable
 		{
-		public:
-			virtual void initSystemTimer(uint32_t coreFrequency, uint32_t ticksFrequency) = 0;
-			virtual void startSystemTimer() = 0;
-			virtual Irq getIrq() =0;
+			friend class Scheduler;
+		protected:
+			virtual ~Waitable() = default;
+			virtual void stopWait(TaskController* task) = 0;
+
+			virtual void onTimeout(TaskController* task) = 0;
+
+			virtual void abortWait(TaskController* task) = 0;
+
 		};
-	}	//End namespace interfaces
-}//End namespace core
+}

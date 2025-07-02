@@ -25,36 +25,36 @@ in advertising or otherwise to promote the sale, use or other dealings in this
 Software without prior written authorization from Florian GERARD
 
 */
-
+#include <cstdint>
+#include "../framework/assert.hpp"
 #include "Mutex.hpp"
 #include "Hooks.hpp"
 #include "Scheduler.hpp"
-#include "core/Core.hpp"
-
+#include "../YggdrasilConfig.hpp"
 
 namespace kernel
 {
-	
-	int16_t Mutex::lock(uint32_t timeout)
+
+	int16_t Mutex::lock(const uint32_t timeout)
 	{
-		Y_ASSERT(Scheduler::inThreadMode());
+		y_assert(Scheduler::inThreadMode());
 		return supervisorCallLockMutex(this, timeout);
 	}
-	
+
 	bool Mutex::release()
 	{
 		return supervisorCallReleaseMutex(this);
 	}
-	
-	bool Mutex::isLocked()
+
+	bool Mutex::isLocked() const
 	{
 		return m_owner != nullptr;
 	}
-	
+
 	// A task want to get a mutex wait for it if already lock by someone else or get it if free
 	int16_t Mutex::kernelLockMutex(Mutex* mutex, uint32_t duration)
 	{
-		Y_ASSERT(Scheduler::s_activeTask != nullptr);
+		y_assert(Scheduler::s_activeTask != nullptr);
 		if (mutex->m_owner == nullptr)
 		{
 			Hooks::onMutexLock(mutex, Scheduler::s_activeTask);
@@ -63,7 +63,6 @@ namespace kernel
 		}
 		else
 		{
-			Y_ASSERT(Scheduler::s_activeTask != nullptr);
 			mutex->m_waiting.insert(Scheduler::s_activeTask, TaskController::priorityCompare);
 			if (duration > 0)
 			{
@@ -74,8 +73,9 @@ namespace kernel
 			Scheduler::s_activeTask->m_state = kernel::TaskController::State::waitingMutex;
 			Scheduler::s_taskToStack = Scheduler::s_activeTask;
 			Scheduler::s_activeTask = Scheduler::s_ready.getFirst();
+			y_assert(Scheduler::s_activeTask != nullptr);
 			Hooks::onMutexWait(mutex, Scheduler::s_taskToStack, duration);
-			Scheduler::setPendSv(kernel::Scheduler::changeTaskTrigger::waitForMutex);
+			Scheduler::triggerSwitch();
 			return 1; // used to return from interrupt
 		}
 	}
@@ -91,15 +91,14 @@ namespace kernel
 
 	bool Mutex::kernelReleaseMutex(Mutex* mutex)
 	{
-		Y_ASSERT(mutex != nullptr);
+		y_assert(mutex != nullptr);
+        y_assert(mutex->m_owner != nullptr);
 		Hooks::onMutexRelease(mutex);
-		if (mutex->m_owner == nullptr) // this should not append
-			return false;
 		if (!mutex->m_waiting.isEmpty())
 		{
 			TaskController* newReadyTask = mutex->m_waiting.getFirst();
-			Y_ASSERT(newReadyTask != nullptr);
-			Y_ASSERT(!Scheduler::s_ready.contain(newReadyTask)); //If the event ready task is already in ready list, we have a problem
+			y_assert(newReadyTask != nullptr);
+			y_assert(!Scheduler::s_ready.contain(newReadyTask)); //If the event ready task is already in ready list, we have a problem
 			newReadyTask->m_waitingFor = nullptr;
 			mutex->stopWait(newReadyTask);
 			Scheduler::s_ready.insert(newReadyTask, TaskController::priorityCompare);
@@ -107,7 +106,7 @@ namespace kernel
 			mutex->m_owner = newReadyTask;
 			Hooks::onTaskReady(newReadyTask);
 			Hooks::onMutexLock(mutex, newReadyTask);
-			Scheduler::schedule(kernel::Scheduler::changeTaskTrigger::wakeByMutex);
+			Scheduler::maybeSwitchTask();
 		}
 		else
 		{
@@ -119,9 +118,8 @@ namespace kernel
 	void Mutex::onTimeout(TaskController* task)
 	{
 		Hooks::onMutexTimeout(this, task);
-		Y_ASSERT(m_waiting.contain(task));
+		y_assert(m_waiting.contain(task));
 		m_waiting.remove(task);
-		Y_ASSERT(!m_waiting.contain(task));
 		task->m_waitingFor = nullptr; //the task is no more waiting for mutex
 		task->setReturnValue(static_cast<int16_t>(-1)); // timeout code
 		task->m_wakeUpTimeStamp = 0;
@@ -129,10 +127,9 @@ namespace kernel
 		task->m_state = kernel::TaskController::State::ready;
 		Hooks::onMutexTimeout(this, task);
 		Hooks::onTaskReady(task);
-		Scheduler::schedule(kernel::Scheduler::changeTaskTrigger::mutexTimeout);	
 	}
-	
-	Mutex::SupervisorCallLockMutex Mutex::supervisorCallLockMutex  = core::Core::supervisorCall < ServiceCall::SvcNumber::mutexLock, int16_t, Mutex*, uint32_t>;
-	Mutex::SupervisorCallReleaseMutex Mutex::supervisorCallReleaseMutex = core::Core::supervisorCall < ServiceCall::SvcNumber::mutexRelease, bool, Mutex*>;
+
+	Mutex::SupervisorCallLockMutex Mutex::supervisorCallLockMutex  = Core::SupervisorCallHelper<ServiceCall::SvcNumber::mutexLock, int16_t(Mutex*, uint32_t)>::call;
+	Mutex::SupervisorCallReleaseMutex Mutex::supervisorCallReleaseMutex = Core::SupervisorCallHelper<ServiceCall::SvcNumber::mutexRelease,bool( Mutex*)>::call;
 
 }// End namespace kernel
