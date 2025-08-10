@@ -159,9 +159,9 @@ namespace kernel
 	private:
 
 		static bool installKernelInterrupt() {
-			if (!Vector::isInstalled()) {
-				if (!Vector::install())
-					return false;
+
+			if (!Vector::install()) {
+				return false;
 			}
 			//Setup Systick
 			Vector::irqPriority(Core::systemTimerIrq, Config::kernelPriority);

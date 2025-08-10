@@ -1,11 +1,13 @@
-#include "CortexM7.hpp"
-#include "../YggdrasilConfig.hpp"
-#include "../Yggdrasil.hpp"
+#ifdef USE_DEFAULT_CORTEX_M
+#include "CortexM.hpp"
+#include "../../YggdrasilConfig.hpp"
+#include "../../Yggdrasil.hpp"
 #include <cstdint>
+
 
 namespace core {
 
-	void CortexM7::restoreTask(const volatile uint32_t *stackPointer)
+	void CortexM::restoreTask(const volatile uint32_t *stackPointer)
 	{
 		asm volatile(
 			"MOV R0,%0\n\t"			 // load stack pointer from task.stackPointer
@@ -17,7 +19,7 @@ namespace core {
 			"BX LR" ::"r"(stackPointer));
 	}
 
-	[[noreturn]] void CortexM7::idleFunc(uint32_t)
+	[[noreturn]] void CortexM::idleFunc(uint32_t)
 	{
 		while (true)
 		{
@@ -25,7 +27,7 @@ namespace core {
 		}
 	}
 
-	void __attribute__((naked)) CortexM7::contextSwitchHandler()
+	void __attribute__((naked)) CortexM::contextSwitchHandler()
 	{
 		__asm volatile(
 			"CPSID I\n\t"
@@ -58,16 +60,16 @@ namespace core {
 			: "memory");
 	}
 
-	void CortexM7::systemTimerHandler()
+	void CortexM::systemTimerHandler()
 	{
 		kernel::Scheduler::systemTimerTick();
 	}
 
-	uint32_t CortexM7::getCoreFrequency() {
+	uint32_t CortexM::getCoreFrequency() {
 		return 64000000;
 	}
 
-	void __attribute__((naked)) CortexM7::supervisorCallHandler()
+	void __attribute__((naked)) CortexM::supervisorCallHandler()
 	{
 		__asm volatile(
 			"TST LR,#4\n\t"		// test bit 2 of EXC_RETURN to know if MSP or PSP
@@ -85,41 +87,42 @@ namespace core {
 			:);
 	}
 
-	void CortexM7::hardFault()
+	void CortexM::hardFault()
 	{
 		breakpoint();
 	}
 
-	void CortexM7::nmi()
+	void CortexM::nmi()
 	{
 		breakpoint();
 	}
 
-	void CortexM7::usageFault()
+	void CortexM::usageFault()
 	{
 		breakpoint();
 	}
 
-	void CortexM7::busFault()
+	void CortexM::busFault()
 	{
 		breakpoint();
 	}
 
-	uint32_t CortexM7::getCurrentInterruptNumber()
+	uint32_t CortexM::getCurrentInterruptNumber()
 	{
 		return __get_IPSR();
 	}
 
-	void CortexM7::HardFaultAnalyzer(uint32_t *stackPointer)
+	void CortexM::HardFaultAnalyzer(uint32_t *stackPointer)
 	{
 		breakpoint();
 	}
 
-    void CortexM7::breakpoint() {
+    void CortexM::breakpoint() {
 		asm volatile("BKPT #0");
 	}
 
-    void CortexM7::fatalError() {
+    void CortexM::fatalError() {
 		asm volatile("BKPT #0");
 	}
 }
+#endif

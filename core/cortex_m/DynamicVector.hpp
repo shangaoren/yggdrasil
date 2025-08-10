@@ -1,7 +1,8 @@
 #pragma once
+#ifdef USE_DEFAULT_DYNAMIC_VECTOR
 #include <cstdint>
-#include "../framework/assert.hpp"
-#include "core/vendor/st/stm32f303x8.h"
+#include "Irq.hpp"
+#include "../../framework/assert.hpp"
 
 namespace core {
   class Irq
@@ -156,3 +157,4 @@ class DynamicVector {
 	}
 };
 }
+#endif

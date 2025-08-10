@@ -7,8 +7,9 @@ file(GLOB ${PROJECT_NAME}_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/kernel/Scheduler.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/kernel/Mutex.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/kernel/Event.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/kernel/CriticalSection.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/framework/assert.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/core/CortexM7.cpp"
+        "core/cortex_m/CortexM.cpp"
         )
 add_library(${PROJECT_NAME}  ${${PROJECT_NAME}_SOURCES})
 target_include_directories(${PROJECT_NAME} PUBLIC

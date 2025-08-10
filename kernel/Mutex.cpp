@@ -89,6 +89,13 @@ namespace kernel
 		}
 	}
 
+	void Mutex::abortWait(TaskController *task) {
+		y_assert(m_waiting.contain(task));
+		m_waiting.remove(task);
+		stopWait(task);
+		task->m_waitingFor = nullptr;
+	}
+
 	bool Mutex::kernelReleaseMutex(Mutex* mutex)
 	{
 		y_assert(mutex != nullptr);

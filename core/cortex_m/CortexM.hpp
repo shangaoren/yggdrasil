@@ -1,16 +1,16 @@
 #pragma once
-
+#ifdef USE_DEFAULT_CORTEX_M
 #include <cstdint>
 #include <type_traits>
 
-#include "../kernel/ServiceCall.hpp"
+#include "../../kernel/ServiceCall.hpp"
 
 #include "DynamicVector.hpp"
-#include "Systick.hpp"
-#include "../kernel/Task.hpp"
+#include "../Systick.hpp"
+#include "../../kernel/Task.hpp"
 
 namespace core {
-class CortexM7 {
+class CortexM {
 public:
 
     using SystemTimer = core::HALSystick;
@@ -166,3 +166,4 @@ public:
         };
 };
 }
+#endif

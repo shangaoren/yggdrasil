@@ -3,6 +3,9 @@
 #if __has_include("KernelConfig.hpp")
 #include "KernelConfig.hpp"
 #else
+#define USE_DEFAULT_DYNAMIC_VECTOR
+#define USE_DEFAULT_CORTEX_M
+#define
 #include "core/CortexM7.hpp"
 #include "core/DynamicVector.hpp"
 #include "core/vendor/st/stm32f303x8.h"
