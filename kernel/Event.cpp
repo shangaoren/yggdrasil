@@ -71,25 +71,21 @@ namespace kernel
 			event->m_isRaised = false;
 			return 1;
 		}
-		else	//add task at the end of the waiting list
-		{
-
-			if (event->m_waiter != nullptr)
-				return 0;
-			//no need to lock as we are in SVC so nothing should interrupt and write this
-			y_assert(Scheduler::s_activeTask != nullptr);
-			event->m_waiter = Scheduler::s_activeTask; //insert active task into event waiting list
-			if (duration > 0)
-			{
-				Scheduler::s_activeTask->m_wakeUpTimeStamp = static_cast<uint32_t>(Scheduler::s_ticks) + duration;
-				Scheduler::s_waiting.insert(Scheduler::s_activeTask, TaskController::sleepCompare);
-			}
-			Scheduler::s_activeTask->m_waitingFor = event;
-			Scheduler::s_activeTask->m_state = TaskController::State::waitingEvent;		   //sets active task as waiting
-			Hooks::onTaskWaitEvent(Scheduler::s_taskToStack, event);
-			Scheduler::triggerSwitch();
-			return 1;
+		//add task at the end of the waiting list
+		if (event->m_waiter != nullptr)
+			return 0;
+		//no need to lock as we are in SVC so nothing should interrupt and write this
+		y_assert(Scheduler::s_activeTask != nullptr);
+		event->m_waiter = Scheduler::s_activeTask; //insert active task into event waiting list
+		if (duration > 0) {
+			Scheduler::s_activeTask->m_wakeUpTimeStamp = static_cast<uint32_t>(Scheduler::s_ticks) + duration;
+			Scheduler::s_waiting.insert(Scheduler::s_activeTask, TaskController::sleepCompare);
 		}
+		Scheduler::s_activeTask->m_waitingFor = event;
+		Scheduler::s_activeTask->m_state = TaskController::State::waitingEvent; //sets active task as waiting
+		Hooks::onTaskWaitEvent(Scheduler::s_taskToStack, event);
+		Scheduler::triggerSwitch();
+		return 1;
 	}
 
 	int16_t Event::wait(uint32_t duration)
@@ -156,6 +152,7 @@ namespace kernel
 		Scheduler::s_ready.insert(task, TaskController::priorityCompare);
 		task->m_state = TaskController::State::ready;
 		Hooks::onTaskReady(task);
+		Scheduler::maybeSwitchTask();
 	}
     void Event::abortWait(TaskController *task) {
 		y_assert(m_waiter == task);

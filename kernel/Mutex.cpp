@@ -134,6 +134,7 @@ namespace kernel
 		task->m_state = kernel::TaskController::State::ready;
 		Hooks::onMutexTimeout(this, task);
 		Hooks::onTaskReady(task);
+		Scheduler::maybeSwitchTask();
 	}
 
 	Mutex::SupervisorCallLockMutex Mutex::supervisorCallLockMutex  = Core::SupervisorCallHelper<ServiceCall::SvcNumber::mutexLock, int16_t(Mutex*, uint32_t)>::call;

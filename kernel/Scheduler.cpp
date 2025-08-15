@@ -67,10 +67,7 @@ namespace kernel {
     bool Scheduler::maybeSwitchTask() {
         scheduled = true;
         y_assert(s_ready.count() != 0); //assertion to check there is ready tasks
-        if (s_activeTask == nullptr) {
-            y_assert(false);
-            return false;
-        }
+        y_assert(s_activeTask != nullptr);
         if (s_ready.peekFirst()->m_priority > s_activeTask->m_priority)
         //a task with higher priority is waiting, trigger context switching
         {
