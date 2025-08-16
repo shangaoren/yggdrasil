@@ -41,7 +41,7 @@ namespace kernel
 	{
 		friend class Scheduler; //let Scheduler access private function but no one else
 	public:
-		constexpr explicit Event(const char*name = nullptr) :m_waiter(nullptr), m_isRaised(false), m_name(name)
+		constexpr explicit Event(const char*name = nullptr) : m_name(name)
 		{
 		}
 
@@ -83,8 +83,8 @@ namespace kernel
 	  private:
 
 		//------------------PRIVATE DATA------------------------
-		TaskController* volatile m_waiter;
-		bool m_isRaised;
+		TaskController* volatile m_waiter = nullptr;
+		bool m_isRaised = false;
 		const char *m_name;
 
 		//------------------PRIVATE FUNCTIONS---------------------

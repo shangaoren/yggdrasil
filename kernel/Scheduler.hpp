@@ -53,7 +53,6 @@ namespace kernel {
 
         /* Task Related Variables */
         static TaskController *volatile s_activeTask;
-        static TaskController *volatile s_taskToStack;
         static volatile bool scheduled;
         static volatile uint8_t s_lockLevel; // store the level of lock before critical section enters
         static volatile bool s_isKernelLocked; // indicates if the kernel is in a critical section mode

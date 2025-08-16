@@ -28,139 +28,162 @@
 #pragma once
 #include <cstdint>
 
-#include "yggdrasil/framework/DualLinkedList.hpp"
+#include "yggdrasil/framework/YList.hpp"
 #include "yggdrasil/kernel/Waitable.hpp"
 
 namespace kernel {
-class TaskController;
+    class TaskController;
 
-class StartedList: public framework::DualLinkedList<TaskController, StartedList> {
-};
-class ReadyList: public framework::DualLinkedList<TaskController, ReadyList> {
-};
-class SleepingList: public framework::DualLinkedList<TaskController, SleepingList> {
-};
-class WaitableList: public framework::DualLinkedList<TaskController, WaitableList> {
-};
-class EventList: public framework::DualLinkedList<TaskController, EventList> {
-};
+    class StartedListNode : public framework::YNode<TaskController> {};
+    class ReadyListNode : public framework::YNode<TaskController> {};
+    class SleepingListNode : public framework::YNode<TaskController> {};
+    class WaitableListNode : public framework::YNode<TaskController> {};
+    class EventListNode : public framework::YNode<TaskController> {};
 
-class TaskController: public framework::DualLinkNode<TaskController, StartedList>, public framework::DualLinkNode<TaskController, ReadyList>, public framework::DualLinkNode<TaskController, SleepingList>, public framework::DualLinkNode<TaskController, WaitableList>, public framework::DualLinkNode<TaskController, EventList> {
-	friend class Scheduler;
-	friend class Event;
-	friend class Mutex;
-public:
+    using StartedList = framework::YList<TaskController, StartedListNode>;
+    using ReadyList = framework::YList<TaskController, ReadyListNode>;
+    using SleepingList = framework::YList<TaskController, SleepingListNode>;
+    using WaitableList = framework::YList<TaskController, WaitableListNode>;
+    using EventList = framework::YList<TaskController, EventListNode>;
 
-	using TaskFunc = void (*)(uint32_t);
-	using StartTaskStub = bool(&)(TaskController*);
-	using StopTaskStub = bool(&)(TaskController*);
+    class TaskController : public StartedListNode, public ReadyListNode, public SleepingListNode, public WaitableListNode, public EventListNode {
+        friend class Scheduler;
+        friend class Event;
+        friend class Mutex;
 
-	bool start(TaskFunc function, bool isPrivilegied, uint32_t taskPriority, uint32_t parameter, const char *name);
-	bool stop();
-	[[nodiscard]] bool isStackCorrupted() const;
-	static StartTaskStub &startTaskStub;
-	static StopTaskStub &stopTaskStub;
-	static void taskWrapper(TaskController &task, TaskFunc func, uint32_t parameter);
-	static void taskFinished();
+    public:
+        using TaskFunc = void (*)(uint32_t);
+        using StartTaskStub = bool(&)(TaskController *);
+        using StopTaskStub = bool(&)(TaskController *);
 
-	enum class State : uint32_t {
-		sleeping = 0, active = 1, waitingEvent = 2, notStarted = 3, ready = 4, waitingMutex = 5,
-	};
-	constexpr TaskController(uint32_t *stack,const uint32_t stackSize) :
-		m_stackOrigin(stack), m_stackSize(stackSize) {
-	}
+        bool start(TaskFunc function, bool isPrivilegied, uint32_t taskPriority, uint32_t parameter, const char *name);
 
-private:
-	uint32_t volatile *m_stackPointer = nullptr;
-	uint32_t *const m_stackOrigin;
-	const uint32_t m_stackSize;
+        bool stop();
 
-	volatile uint32_t m_wakeUpTimeStamp = 0;
-	Waitable *volatile m_waitingFor = nullptr;
-	uint32_t m_priority = 0;
-	State m_state = State::notStarted;
-	const char *m_name = nullptr;
+        [[nodiscard]] bool isStackCorrupted() const;
+
+        static StartTaskStub &startTaskStub;
+        static StopTaskStub &stopTaskStub;
+
+        static void taskWrapper(TaskController &task, TaskFunc func, uint32_t parameter);
+
+        static void taskFinished();
+
+        enum class State : uint32_t {
+            sleeping = 0, active = 1, waitingEvent = 2, notStarted = 3, ready = 4, waitingMutex = 5,
+        };
+
+        constexpr TaskController(uint32_t *stack, const uint32_t stackSize) : m_stackOrigin(stack),
+                                                                              m_stackSize(stackSize) {
+        }
+
+    private:
+        uint32_t volatile *m_stackPointer = nullptr;
+        uint32_t *const m_stackOrigin;
+        const uint32_t m_stackSize;
+
+        std::atomic<uint32_t> wakeUpTimeStamp_ = 0;
+        std::atomic<Waitable*> waitingFor_ = nullptr;
+        uint32_t m_priority = 0;
+        State m_state = State::notStarted;
+        const char *m_name = nullptr;
+
+        [[nodiscard]] uint32_t wakeupTimestamp() const {
+            return wakeUpTimeStamp_.load(std::memory_order_relaxed);
+        }
+
+        void wakeupTimestamp(const uint32_t value) {
+            wakeUpTimeStamp_.store(value, std::memory_order_relaxed);
+        }
+
+        [[nodiscard]] Waitable* waitingFor() const {
+            return waitingFor_.load(std::memory_order_relaxed);
+        }
+
+        void waitingFor(Waitable* const value) {
+            waitingFor_.store(value, std::memory_order_relaxed);
+        }
 #ifdef KDEBUG
-	//TODO restore
-		//uint32_t m_stackUsage; // used to measure the usage of task's stack
+        //TODO restore
+        //uint32_t m_stackUsage; // used to measure the usage of task's stack
 #endif // KDEBUG
 
 
-	/*Compare two Task timestamps
-	 * if base task was running after compared result is 1
-	 * if compared was running before base result is -1
-	 * if timestamps are the same
-	 * 		if base is higher priority result is -1
-	 * 		if compared is higher priority result is 1
-	 * 		else result is 0								*/
-	static int8_t sleepCompare(TaskController const *base, TaskController const *compared) {
-		if (base->m_wakeUpTimeStamp > compared->m_wakeUpTimeStamp)
-			return 1;
-		if (base->m_wakeUpTimeStamp < compared->m_wakeUpTimeStamp)
-			return -1;
-		if (base->m_wakeUpTimeStamp == compared->m_wakeUpTimeStamp) {
-			if (base->m_priority > compared->m_priority)
-				return -1;
-			if (base->m_priority < compared->m_priority)
-				return 1;
-		}
-		return 0;
-	}
+        /*Compare two Task timestamps
+         * if base task was running after compared result is 1
+         * if compared was running before base result is -1
+         * if timestamps are the same
+         * 		if base is higher priority result is -1
+         * 		if compared is higher priority result is 1
+         * 		else result is 0								*/
+        static int8_t sleepCompare(TaskController const *base, TaskController const *compared) {
+            if (base->wakeupTimestamp() > compared->wakeupTimestamp())
+                return 1;
+            if (base->wakeupTimestamp() < compared->wakeupTimestamp())
+                return -1;
+            if (base->wakeupTimestamp() == compared->wakeupTimestamp()) {
+                if (base->m_priority > compared->m_priority)
+                    return -1;
+                if (base->m_priority < compared->m_priority)
+                    return 1;
+            }
+            return 0;
+        }
 
-	/*Compare two tasks
-	 * If base Task has higher priority (higher number) result is -1
-	 * If priorities are equals result is 0
-	 * If compared has higher priority result is 1*/
-	static int8_t priorityCompare(TaskController const *base, TaskController const *compared) {
-		if (base->m_priority > compared->m_priority)
-			return -1;
-		if (base->m_priority < compared->m_priority)
-			return 1;
-		return 0;
-	}
+        /*Compare two tasks
+         * If base Task has higher priority (higher number) result is -1
+         * If priorities are equals result is 0
+         * If compared has higher priority result is 1*/
+        static int8_t priorityCompare(TaskController const *base, TaskController const *compared) {
+            if (base->m_priority > compared->m_priority)
+                return -1;
+            if (base->m_priority < compared->m_priority)
+                return 1;
+            return 0;
+        }
 
-	void setReturnValue(uint32_t value) const{
-		auto ctrl = *(m_stackPointer + 8);
-		if ((ctrl & 0b100) == 0) // check bit #2 of control to know if floating point is active or not
-			*(reinterpret_cast<volatile uint32_t*>(m_stackPointer + 10)) = value;
-		else
-			*(reinterpret_cast<volatile uint32_t*>(m_stackPointer + 26)) = value; //TODO Test
-	}
+        void setReturnValue(uint32_t value) const {
+            auto ctrl = *(m_stackPointer + 8);
+            if ((ctrl & 0b100) == 0) // check bit #2 of control to know if floating point is active or not
+                *(reinterpret_cast<volatile uint32_t *>(m_stackPointer + 10)) = value;
+            else
+                *(reinterpret_cast<volatile uint32_t *>(m_stackPointer + 26)) = value; //TODO Test
+        }
 
-	//TODO strange value + 1 vs + 8
-	void setReturnValue(int16_t value) const{
-		uint32_t ctrl = *(m_stackPointer + 1);
-		if ((ctrl & 0b100) == 0) // check bit #2 of control to know if floating point is active or not
-			*(reinterpret_cast<volatile int16_t*>(m_stackPointer + 10)) = value;
-		else
-			*(reinterpret_cast<volatile int16_t*>(m_stackPointer + 26)) = value; //TODO Test
-	}
+        //TODO strange value + 1 vs + 8
+        void setReturnValue(int16_t value) const {
+            uint32_t ctrl = *(m_stackPointer + 1);
+            if ((ctrl & 0b100) == 0) // check bit #2 of control to know if floating point is active or not
+                *(reinterpret_cast<volatile int16_t *>(m_stackPointer + 10)) = value;
+            else
+                *(reinterpret_cast<volatile int16_t *>(m_stackPointer + 26)) = value; //TODO Test
+        }
 
-	inline void setStackPointer(uint32_t *stackPosition) {
-		m_stackPointer = stackPosition;
+        inline void setStackPointer(uint32_t *stackPosition) {
+            m_stackPointer = stackPosition;
 #ifdef KDEBUG
-			//m_stackUsage = m_stackSize - (stackPosition-m_stackOrigin);
+            //m_stackUsage = m_stackSize - (stackPosition-m_stackOrigin);
 #endif // KDEBUG
-	}
-};
+        }
+    };
 
-template<uint32_t StackSize>
-class Task {
-public:
-	constexpr Task<StackSize>() :
-			m_ctrl(m_stack, StackSize) {
-	}
-	inline bool start(TaskController::TaskFunc function,const bool isPrivilegied, const uint32_t taskPriority, const uint32_t parameter = 0, const char *name = "") {
-		return m_ctrl.start(function, isPrivilegied, taskPriority, parameter, name);
-	}
+    template<uint32_t StackSize>
+    class Task {
+    public:
+        constexpr Task<StackSize>() : m_ctrl(m_stack, StackSize) {
+        }
 
-	inline bool stop(){
-		return m_ctrl.stop();
-	}
+        inline bool start(TaskController::TaskFunc function, const bool isPrivilegied, const uint32_t taskPriority,
+                          const uint32_t parameter = 0, const char *name = "") {
+            return m_ctrl.start(function, isPrivilegied, taskPriority, parameter, name);
+        }
 
-private:
-	uint32_t m_stack[StackSize]__attribute__((aligned(4)));
-	TaskController m_ctrl;
+        inline bool stop() {
+            return m_ctrl.stop();
+        }
 
-};
+    private:
+        uint32_t m_stack[StackSize]__attribute__((aligned(4)));
+        TaskController m_ctrl;
+    };
 } // namespace kernel

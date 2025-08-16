@@ -35,8 +35,6 @@ namespace kernel {
     bool Scheduler::s_schedulerStarted = false;
     volatile uint64_t Scheduler::s_ticks = 0;
     TaskController *volatile Scheduler::s_activeTask = nullptr;
-    TaskController *volatile Scheduler::s_taskToStack = nullptr;
-
     volatile bool Scheduler::scheduled = false;
     volatile uint8_t Scheduler::s_lockLevel = 0;
     volatile bool Scheduler::s_isKernelLocked = false;
@@ -66,16 +64,15 @@ namespace kernel {
 
     bool Scheduler::maybeSwitchTask() {
         scheduled = true;
-        y_assert(s_ready.count() != 0); //assertion to check there is ready tasks
+        y_assert(!s_ready.empty()); //assertion to check there is ready tasks
         y_assert(s_activeTask != nullptr);
-        if (s_ready.peekFirst()->m_priority > s_activeTask->m_priority)
-        //a task with higher priority is waiting, trigger context switching
-        {
-            //Store currently running task
-            s_ready.insert(s_activeTask, TaskController::priorityCompare);
-            s_activeTask->m_state = TaskController::State::ready;
-            Hooks::onTaskStopExec(s_activeTask);
-            Hooks::onTaskReady(s_activeTask);
+        if (!s_ready.empty() && s_ready.begin()->m_priority > s_activeTask->m_priority) {
+            if (s_activeTask->m_state == TaskController::State::active) {
+                s_ready.insert(s_activeTask, TaskController::priorityCompare);
+                s_activeTask->m_state = TaskController::State::ready;
+                Hooks::onTaskStopExec(s_activeTask);
+                Hooks::onTaskReady(s_activeTask);
+            }
             triggerSwitch();
             return true;
         }
@@ -88,16 +85,16 @@ namespace kernel {
 
 
     bool Scheduler::stopTask(TaskController *task) {
-        s_ready.remove(task);
-        s_sleeping.remove(task);
-        s_started.remove(task);
-        if (task->m_waitingFor) {
-            task->m_waitingFor->abortWait(task);
+        s_ready.erase(task);
+        s_sleeping.erase(task);
+        s_started.erase(task);
+        if (task->waitingFor()) {
+            task->waitingFor()->abortWait(task);
         }
         task->m_state = TaskController::State::notStarted;
         Hooks::onTaskClose(task);
         if (s_activeTask == task) {
-            s_activeTask = s_ready.getFirst();
+            s_activeTask = s_ready.get_and_pop_front().item();
             y_assert(s_activeTask != nullptr);
             Core::restoreTask(s_activeTask->m_stackPointer);
         }
@@ -107,13 +104,11 @@ namespace kernel {
     bool __attribute__((optimize("O0"))) Scheduler::sleep(const uint32_t ms) {
         // should be triggered directly from task
         y_assert(s_activeTask != nullptr);
-        y_assert(s_taskToStack == nullptr);
-        s_activeTask->m_wakeUpTimeStamp = static_cast<uint32_t>(s_ticks) + ms;
+        s_activeTask->wakeupTimestamp(static_cast<uint32_t>(s_ticks) + ms);
         //Put active Task to sleep
-        y_assert(!s_sleeping.contain(s_taskToStack)); // if active task already in sleeping list we have a problem
         s_sleeping.insert(s_activeTask, TaskController::sleepCompare);
         s_activeTask->m_state = TaskController::State::sleeping;
-        Hooks::onTaskSleep(s_taskToStack, ms);
+        Hooks::onTaskSleep(s_activeTask, ms);
         triggerSwitch(); //active task is sleeping, trigger context switch
         return true;
     }
@@ -128,10 +123,8 @@ namespace kernel {
 
     volatile uint32_t *__attribute__((optimize("O0"))) Scheduler::taskSwitch(uint32_t *stackPosition) {
             y_assert(s_activeTask != nullptr);
-            //TODO add check to verify that task is running inside stack boundaries
-            //y_assert(!s_taskToStack->isStackCorrupted());
             s_activeTask->setStackPointer(stackPosition);
-            s_activeTask = s_ready.getFirst();
+            s_activeTask = s_ready.get_and_pop_front().item();
             y_assert(s_activeTask != nullptr);
             s_activeTask->m_state = kernel::TaskController::State::active;
             Hooks::onTaskStartExec(s_activeTask);
@@ -141,22 +134,22 @@ namespace kernel {
     void Scheduler::systemTimerTick() {
         bool maybeNeedsTaskSwitch = false;
         s_ticks = s_ticks + 1;
-        while (!s_sleeping.isEmpty() && (s_sleeping.peekFirst()->m_wakeUpTimeStamp) <= s_ticks)
+        while (!s_sleeping.empty() && (s_sleeping.begin()->wakeupTimestamp()) <= s_ticks)
         //one task or more is waiting, let's see if waiting is over
         {
             maybeNeedsTaskSwitch = true;
-            TaskController *readyTask = s_sleeping.getFirst();
+            TaskController *readyTask = s_sleeping.get_and_pop_front().item();
             y_assert(readyTask != nullptr);
-            readyTask->m_wakeUpTimeStamp = 0;
+            readyTask->wakeupTimestamp(0);
             readyTask->m_state = kernel::TaskController::State::ready;
             y_assert(!s_ready.contain(readyTask)); //new Ready task should not being already in ready list
             s_ready.insert(readyTask, TaskController::priorityCompare);
             Hooks::onTaskReady(readyTask);
         }
-        while (!s_waiting.isEmpty() && (s_waiting.peekFirst()->m_wakeUpTimeStamp <= s_ticks)) {
-            TaskController *timeouted = s_waiting.getFirst();
-            y_assert(timeouted->m_waitingFor != nullptr);
-            timeouted->m_waitingFor->onTimeout(timeouted);
+        while (!s_waiting.empty() && (s_waiting.begin()->wakeupTimestamp() <= s_ticks)) {
+            TaskController *timeouted = s_waiting.get_and_pop_front().item();
+            y_assert(timeouted->waitingFor() != nullptr);
+            timeouted->waitingFor()->onTimeout(timeouted);
         }
         if (maybeNeedsTaskSwitch)
             maybeSwitchTask();
@@ -238,7 +231,7 @@ namespace kernel {
 
     bool __attribute__((aligned(4), optimize("O0"))) Scheduler::startFirstTask() {
         //start a task, reset main stack pointer
-        s_activeTask = s_ready.getFirst();
+        s_activeTask = s_ready.get_and_pop_front().item();
         y_assert(s_activeTask != nullptr);
         Hooks::onTaskStartExec(s_activeTask);
         s_schedulerStarted = true;
@@ -249,8 +242,7 @@ namespace kernel {
     void Scheduler::enterKernelCriticalSection() {
           y_assert(s_isKernelLocked == false);
           if (!s_isKernelLocked) {
-              //TODO
-              //s_lockLevel = Vector::lockInterruptsHigherThan(s_systemPriority + 1);
+              s_lockLevel = Vector::lockInterruptsHigherThan(Config::kernelPriority);
               s_isKernelLocked = true;
           }
       }

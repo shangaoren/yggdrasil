@@ -36,8 +36,8 @@ TaskController::StopTaskStub TaskController::stopTaskStub = Core::SupervisorCall
 bool TaskController::start(TaskFunc function, bool isPrivilegied, uint32_t priority, uint32_t parameter = 0, const char *name = nullptr) {
 	if (m_state != State::notStarted)
 		return false;
-    m_wakeUpTimeStamp = 0;
-    m_waitingFor = nullptr;
+    wakeUpTimeStamp_ = 0;
+    waitingFor_ = nullptr;
     m_name = name;
 	m_stackPointer = m_stackOrigin + m_stackSize - 18;
 	m_stackOrigin[0] = 0xDEAD;
