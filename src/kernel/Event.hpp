@@ -31,7 +31,7 @@ Software without prior written authorization from Florian GERARD
 #include <cstdint>
 
 #include "Task.hpp" 
-#include "yggdrasil/kernel/Waitable.hpp"
+#include "yggdrasil/src/kernel/Waitable.hpp"
 
 
 namespace kernel
@@ -41,7 +41,7 @@ namespace kernel
 	{
 		friend class Scheduler; //let Scheduler access private function but no one else
 	public:
-		constexpr explicit Event(const char*name = nullptr) : m_name(name)
+		constexpr explicit Event(const char*name) : m_name(name)
 		{
 		}
 
@@ -67,24 +67,22 @@ namespace kernel
 		bool signal();
 
 		[[nodiscard]] bool someoneWaiting() const;
-
 		[[nodiscard]] bool isAlreadyUp() const ;
 
 		void reset();
     protected:
-		void stopWait(TaskController* task) override;
 		void onTimeout(TaskController* task) override;
         void abortWait(TaskController* task) override;
 
-		static bool kernelSignalEvent(Event* event);
+		static void kernelSignalEvent(Event* event);
 		static int16_t kernelWaitEvent(Event* event, uint32_t duration);
 		static void kernelDeleteEvent(Event* event);
 
 	  private:
 
 		//------------------PRIVATE DATA------------------------
-		TaskController* volatile m_waiter = nullptr;
-		bool m_isRaised = false;
+		std::atomic<TaskController*> waiter = nullptr;
+		std::atomic<bool> isRaised = false;
 		const char *m_name;
 
 		//------------------PRIVATE FUNCTIONS---------------------

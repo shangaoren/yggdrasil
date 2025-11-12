@@ -1,5 +1,6 @@
 #pragma once
-#include "yggdrasil/kernel/Waitable.hpp"
+#include "Scheduler.hpp"
+#include "yggdrasil/src/kernel/Waitable.hpp"
 
 namespace kernel
 {
@@ -29,6 +30,9 @@ namespace kernel
 
 		static void onTaskStartExec(TaskController *task)
 		{
+			if (Scheduler::ready.empty() && core::Core::idleTask.m_ctrl.state() == TaskController::State::ready) {
+				core::Core::breakpoint();
+			}
 #ifdef SYSVIEW
 			SystemView::get().onTaskStartExec(s_activeTask);
 #endif
@@ -36,6 +40,9 @@ namespace kernel
 
 		static void onTaskStopExec(TaskController *task)
 		{
+			if (Scheduler::ready.empty() && core::Core::idleTask.m_ctrl.state() == TaskController::State::ready) {
+				core::Core::breakpoint();
+			}
 			
 		}
 
@@ -48,6 +55,9 @@ namespace kernel
 
 		static void onTaskReady(TaskController *task)
 		{
+			if (Scheduler::ready.empty() && core::Core::idleTask.m_ctrl.state() == TaskController::State::ready) {
+				core::Core::breakpoint();
+			}
 #ifdef SYSVIEW
 			kernel::SystemView::get().onTaskStartReady(s_taskToStack);
 #endif
@@ -55,6 +65,9 @@ namespace kernel
 
 		static void onTaskSleep(TaskController *task, uint64_t time)
 		{
+			if (Scheduler::ready.empty() && core::Core::idleTask.m_ctrl.state() == TaskController::State::ready) {
+				core::Core::breakpoint();
+			}
 #ifdef SYSVIEW
 			SystemView::get().onTaskStopReady(s_taskToStack, static_cast<uint8_t>(changeTaskTrigger::enterSleep));
 #endif
@@ -62,17 +75,23 @@ namespace kernel
 
 		static void onTaskWaitEvent(TaskController *task, Event *event)
 		{
-			
+			if (Scheduler::ready.empty() && core::Core::idleTask.m_ctrl.state() == TaskController::State::ready) {
+				core::Core::breakpoint();
+			}
 		}
 
 		static void onEventTrigger(Event *event)
 		{
-			
+			if (Scheduler::ready.empty() && core::Core::idleTask.m_ctrl.state() == TaskController::State::ready) {
+				core::Core::breakpoint();
+			}
 		}
 
 		static void onEventTimeout(Event *event)
 		{
-			
+			if (Scheduler::ready.empty() && core::Core::idleTask.m_ctrl.state() == TaskController::State::ready) {
+				core::Core::breakpoint();
+			}
 		}
 		
 		/* Mutex*/

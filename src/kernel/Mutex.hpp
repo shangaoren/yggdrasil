@@ -28,7 +28,7 @@ Software without prior written authorization from Florian GERARD
 
 #pragma once
 #include "Task.hpp"
-#include "yggdrasil/kernel/Waitable.hpp"
+#include "yggdrasil/src/kernel/Waitable.hpp"
 
 
 namespace kernel
@@ -38,9 +38,7 @@ namespace kernel
 		friend class Scheduler;
 	public:
 		
-		constexpr Mutex(): m_owner(nullptr)
-		{
-		}
+		constexpr Mutex()= default;
 
 		/* try to lock resource,
 		 * timeout specify a time in ms to wait for resource, 0 for no timeout
@@ -55,11 +53,10 @@ namespace kernel
 		
 	private:
 		EventList m_waiting;
-		TaskController *m_owner;
+		TaskController *m_owner = nullptr;
 
 		static int16_t kernelLockMutex(Mutex* mutex, uint32_t duration);
-		static bool kernelReleaseMutex(Mutex* mutex);
-		void stopWait(TaskController *task) override;
+		static void kernelReleaseMutex(Mutex* mutex);
 		void onTimeout(TaskController* task) override;
 		
 		// call kernel to lock mutex

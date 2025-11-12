@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "core/vendor/st/stm32f303x8.h"
+#include "src/core/vendor/st/stm32f303x8.h"
 
 
 namespace core {

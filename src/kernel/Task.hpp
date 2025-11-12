@@ -28,28 +28,27 @@
 #pragma once
 #include <cstdint>
 
-#include "yggdrasil/framework/YList.hpp"
-#include "yggdrasil/kernel/Waitable.hpp"
+#include "yggdrasil/src/framework/YList.hpp"
+#include "yggdrasil/src/kernel/Waitable.hpp"
 
 namespace kernel {
     class TaskController;
 
     class StartedListNode : public framework::YNode<TaskController> {};
     class ReadyListNode : public framework::YNode<TaskController> {};
-    class SleepingListNode : public framework::YNode<TaskController> {};
     class WaitableListNode : public framework::YNode<TaskController> {};
     class EventListNode : public framework::YNode<TaskController> {};
 
     using StartedList = framework::YList<TaskController, StartedListNode>;
     using ReadyList = framework::YList<TaskController, ReadyListNode>;
-    using SleepingList = framework::YList<TaskController, SleepingListNode>;
     using WaitableList = framework::YList<TaskController, WaitableListNode>;
     using EventList = framework::YList<TaskController, EventListNode>;
 
-    class TaskController : public StartedListNode, public ReadyListNode, public SleepingListNode, public WaitableListNode, public EventListNode {
+    class TaskController : public StartedListNode, public ReadyListNode, public WaitableListNode, public EventListNode {
         friend class Scheduler;
         friend class Event;
         friend class Mutex;
+        friend class Hooks;
 
     public:
         using TaskFunc = void (*)(uint32_t);
@@ -103,12 +102,14 @@ namespace kernel {
         void waitingFor(Waitable* const value) {
             waitingFor_.store(value, std::memory_order_relaxed);
         }
-#ifdef KDEBUG
-        //TODO restore
-        //uint32_t m_stackUsage; // used to measure the usage of task's stack
-#endif // KDEBUG
 
+        [[nodiscard]] auto state() const {
+            return m_state;
+        }
 
+        void state(const State state) {
+            m_state = state;
+        }
         /*Compare two Task timestamps
          * if base task was running after compared result is 1
          * if compared was running before base result is -1
@@ -151,7 +152,7 @@ namespace kernel {
         }
 
         //TODO strange value + 1 vs + 8
-        void setReturnValue(int16_t value) const {
+        void setReturnValue(const int16_t value) const {
             uint32_t ctrl = *(m_stackPointer + 1);
             if ((ctrl & 0b100) == 0) // check bit #2 of control to know if floating point is active or not
                 *(reinterpret_cast<volatile int16_t *>(m_stackPointer + 10)) = value;
@@ -169,16 +170,17 @@ namespace kernel {
 
     template<uint32_t StackSize>
     class Task {
+        friend class Hooks;
     public:
         constexpr Task<StackSize>() : m_ctrl(m_stack, StackSize) {
         }
 
-        inline bool start(TaskController::TaskFunc function, const bool isPrivilegied, const uint32_t taskPriority,
+        bool start(TaskController::TaskFunc function, const bool isPrivilegied, const uint32_t taskPriority,
                           const uint32_t parameter = 0, const char *name = "") {
             return m_ctrl.start(function, isPrivilegied, taskPriority, parameter, name);
         }
 
-        inline bool stop() {
+        bool stop() {
             return m_ctrl.stop();
         }
 

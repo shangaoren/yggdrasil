@@ -34,7 +34,7 @@ Software without prior written authorization from Florian GERARD
 #include <atomic>
 #include <limits>
 
-#include "yggdrasil/framework/assert.hpp"
+#include "yggdrasil/src/framework/assert.hpp"
 
 
 namespace framework {
@@ -309,7 +309,7 @@ namespace framework {
             count_ = 0;
         }
 
-        void insert(iterator pos, pointer item) {
+        void insertAt(iterator pos, pointer item) {
             y_assert(pos.item_ != nullptr);
             y_assert(iterator(item).is_free() && first_ != item);
             auto next = iterator(pos.next());
@@ -327,7 +327,10 @@ namespace framework {
 
         iterator erase(const iterator pos) {
             y_assert(pos.item_ != nullptr);
-            y_assert(!empty());
+
+            if (empty()) {
+                return iterator(nullptr);
+            }
 
             iterator result;
             if (pos == begin()) {
@@ -395,11 +398,11 @@ namespace framework {
                 while (it.next() != nullptr) {
                     ++it;
                 }
-                insert(it, item);
+                insertAt(it, item);
             }
         }
 
-        void insert(Item *node, const Comparator predicate) {
+        void insertWhen(Item *node, const Comparator predicate) {
             auto it = iterator(node);
             y_assert(node != nullptr);
             y_assert(it.is_free() && first_ != node);
@@ -413,7 +416,7 @@ namespace framework {
                     previous = current;
                     current = iterator(previous.next());
                 }
-                insert(previous, it.item());
+                insertAt(previous, it.item());
             }
         }
 

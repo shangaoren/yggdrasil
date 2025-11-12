@@ -37,7 +37,6 @@ namespace kernel
 			friend class Scheduler;
 		protected:
 			virtual ~Waitable() = default;
-			virtual void stopWait(TaskController* task) = 0;
 
 			virtual void onTimeout(TaskController* task) = 0;
 

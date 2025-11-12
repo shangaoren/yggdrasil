@@ -40,28 +40,20 @@ namespace kernel
 		serviceCallEventDelete(this);
 	}
 	//Task rise an event
-	bool Event::kernelSignalEvent(Event* event)
+	void Event::kernelSignalEvent(Event* event)
 	{
 		y_assert(event != nullptr);
 		Hooks::onEventTrigger(event);
-		if (event->m_waiter != nullptr)
+		if (event->waiter != nullptr)
 		{
-			TaskController* newReadyTask = event->m_waiter;
+			TaskController* newReadyTask = event->waiter;
 			y_assert(newReadyTask->waitingFor() == event);
-			y_assert(!Scheduler::s_ready.contain(newReadyTask)); //If the event ready task is already in ready list, we have a problem
-			event->m_waiter = nullptr;
+			event->waiter = nullptr;
 			newReadyTask->waitingFor(nullptr);
-			event->stopWait(newReadyTask);
-			Scheduler::s_ready.insert(newReadyTask, TaskController::priorityCompare);
-			newReadyTask->m_state = kernel::TaskController::State::ready;
-			kernel::Hooks::onTaskReady(newReadyTask);
-			y_assert(Scheduler::s_ready.contain(newReadyTask));
-			y_assert(!Scheduler::s_waiting.contain(newReadyTask));
-			Scheduler::maybeSwitchTask();
+			Scheduler::resume(newReadyTask);
 		}
 		else
-			event->m_isRaised = true;
-		return true;
+			event->isRaised = true;
 	}
 
 
@@ -69,53 +61,46 @@ namespace kernel
 	// return 1 if wait success, 0 if unable to wait, -1 if timeout
 	int16_t Event::kernelWaitEvent(Event* event, uint32_t duration)
 	{
-		if (event->m_isRaised)	//event already raised, return
+		y_assert(event != nullptr);
+		const auto currentTask = Scheduler::activeTask.load();
+		y_assert(currentTask != nullptr);
+		y_assert(currentTask->waitingFor() == nullptr);
+		if (event->isRaised)	//event already raised, return
 		{
-			event->m_isRaised = false;
+			event->isRaised = false;
 			return 1;
 		}
 		//add task at the end of the waiting list
-		if (event->m_waiter != nullptr)
+		if (event->waiter != nullptr) {
 			return 0;
-		//no need to lock as we are in SVC so nothing should interrupt and write this
-		y_assert(Scheduler::s_activeTask != nullptr);
-		y_assert(Scheduler::s_activeTask->waitingFor() == nullptr);
-		event->m_waiter = Scheduler::s_activeTask; //insert active task into event waiting list
-		if (duration > 0) {
-			Scheduler::s_activeTask->wakeupTimestamp(static_cast<uint32_t>(Scheduler::s_ticks) + duration);
-			Scheduler::s_waiting.insert(Scheduler::s_activeTask, TaskController::sleepCompare);
 		}
-		Scheduler::s_activeTask->waitingFor(event);
-		Scheduler::s_activeTask->m_state = TaskController::State::waitingEvent; //sets active task as waiting
-		Hooks::onTaskWaitEvent(Scheduler::s_activeTask, event);
-		//y_assert(duration > 0 ^ !Scheduler::s_waiting.contain(Scheduler::s_activeTask) ^ !Scheduler::s_activeTask->wakeupTimestamp() != 0);
+		event->waiter = currentTask; //insert active task into event waiting list
+		if (duration > 0) {
+			Scheduler::waitFor(Scheduler::activeTask, duration);
+		}
+		currentTask->waitingFor(event);
+		currentTask->m_state = TaskController::State::waitingEvent; //sets active task as waiting
+		Hooks::onTaskWaitEvent(currentTask, event);
 		Scheduler::triggerSwitch();
 		return 1;
 	}
 
-	int16_t Event::wait(uint32_t duration)
+	int16_t Event::wait(const uint32_t duration)
 	{
 		y_assert(Scheduler::inThreadMode());
 		return serviceCallEventWait(this, duration);
 	}
 
 	void Event::kernelDeleteEvent(Event *event) {
-		if (event->m_waiter != nullptr) {
-			TaskController* newReadyTask = event->m_waiter;
+		y_assert(event != nullptr);
+		if (event->waiter) {
+			TaskController *newReadyTask = event->waiter;
 			y_assert(newReadyTask->waitingFor() == event);
-			y_assert(!Scheduler::s_ready.contain(newReadyTask)); //If the event ready task is already in ready list, we have a problem
-			event->m_waiter = nullptr;
+			event->waiter = nullptr;
 			newReadyTask->waitingFor(nullptr);
-			event->stopWait(newReadyTask);
-			Scheduler::s_ready.insert(newReadyTask, TaskController::priorityCompare);
-			newReadyTask->m_state = kernel::TaskController::State::ready;
 			newReadyTask->setReturnValue(static_cast<int16_t>(-1));
-			Hooks::onTaskReady(newReadyTask);
+			Scheduler::resume(newReadyTask);
 			y_assert(newReadyTask->waitingFor() == nullptr);
-			y_assert(!Scheduler::s_waiting.contain(newReadyTask));
-			y_assert(newReadyTask->m_state == TaskController::State::ready);
-			y_assert(Scheduler::s_ready.contain(newReadyTask));
-			Scheduler::maybeSwitchTask();
 		}
 	}
 
@@ -128,53 +113,35 @@ namespace kernel
 
 	bool Event::someoneWaiting() const
 	{
-		return m_waiter != nullptr;
+		return waiter != nullptr;
 	}
 
 	void Event::reset()
 	{
-		m_isRaised = false;
+		isRaised = false;
 	}
 
 	bool Event::isAlreadyUp() const
 	{
-		return m_isRaised;
+		return isRaised;
 	}
 
-	void Event::stopWait(TaskController* task)
-	{
-		y_assert((task->wakeupTimestamp() != 0) ^ !Scheduler::s_waiting.contain(task));
-		if (task->wakeupTimestamp() != 0)
-		{
-			Scheduler::s_waiting.erase(task);
-			task->wakeupTimestamp(0);
-		}
-
-	}
 	void Event::onTimeout(TaskController* task)
 	{
 		Hooks::onEventTimeout(this);
 		y_assert(task != nullptr);
-		y_assert(task == m_waiter);
+		y_assert(task == waiter);
 		y_assert(task->waitingFor() == this);
-		m_waiter = nullptr; // no more task waiting the event
+		waiter = nullptr; // no more task waiting the event
 		task->waitingFor(nullptr); //the task is no more waiting for event
 		task->setReturnValue(static_cast<int16_t>(-1));
-		task->wakeupTimestamp(0);
-		Scheduler::s_ready.insert(task, TaskController::priorityCompare);
-		task->m_state = TaskController::State::ready;
-
-		y_assert(!Scheduler::s_waiting.contain(task));
+		Scheduler::resume(task);
 		y_assert(task->waitingFor() == nullptr);
-		y_assert(task->wakeupTimestamp() == 0);
-		y_assert(Scheduler::s_ready.contain(task));
-		Hooks::onTaskReady(task);
-		Scheduler::maybeSwitchTask();
 	}
     void Event::abortWait(TaskController *task) {
-		y_assert(m_waiter == task);
-		m_waiter = nullptr;
-		stopWait(task);
+		y_assert(waiter == task);
+		waiter = nullptr;
+		Scheduler::stopWait(task);
 		task->waitingFor(nullptr);
     }
 

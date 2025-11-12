@@ -39,6 +39,7 @@ namespace kernel {
         friend class Event;
         friend class Mutex;
         friend class Yggdrasil;
+        friend class Hooks;
         friend Core;
 
     private:
@@ -46,23 +47,26 @@ namespace kernel {
         /*****************************************************DATA*****************************************************/
 
         /* Tasks Lists */
-        static ReadyList s_ready;
-        static SleepingList s_sleeping;
-        static StartedList s_started;
-        static WaitableList s_waiting;
+        static ReadyList ready;
+        static StartedList started;
+        static WaitableList waiting;
 
         /* Task Related Variables */
-        static TaskController *volatile s_activeTask;
-        static volatile bool scheduled;
-        static volatile uint8_t s_lockLevel; // store the level of lock before critical section enters
-        static volatile bool s_isKernelLocked; // indicates if the kernel is in a critical section mode
+        static std::atomic<TaskController*> taskToStack;
+        static std::atomic<TaskController*> activeTask;
+        static std::atomic<TaskController*> nextTask;
+        static std::atomic<uint8_t> lockLevel; // store the level of lock before critical section enters
+        static std::atomic<bool> isKernelLocked; // indicates if the kernel is in a critical section mode
 
         /* Scheduler misc */
-        static bool s_schedulerStarted;
-        volatile static uint64_t s_ticks;
+        static bool schedulerStarted;
+        static uint64_t ticks;
 
         /****************************************************FUNCTIONS*************************************************/
 
+        static void checkTasks();
+
+        static void switchCurrentTask();
 
         /*Lock all interrupt lower or equal of system*/
         static void enterKernelCriticalSection();
@@ -81,10 +85,16 @@ namespace kernel {
         static bool maybeSwitchTask();
 
         /*Stop a Task*/
-        static bool stopTask(TaskController *task);
+        static void stopTask(TaskController *task);
 
         //function to sleep a task for a number of ms
-        static bool sleep(uint32_t ms);
+        static void sleep(uint32_t ms);
+
+        static void waitFor(TaskController *task, uint32_t ticks);
+
+        static void resume(TaskController* task);
+
+        static void stopWait(TaskController *task);
 
         static volatile uint32_t *taskSwitch(uint32_t *stackPosition);
 
@@ -94,7 +104,7 @@ namespace kernel {
 
         static void supervisorCall(ServiceCall::SvcNumber service, uint32_t *t_args);
 
-        static bool __attribute__((aligned(4), optimize("O0"))) startFirstTask();
+        static bool __attribute__((aligned(4))) startFirstTask();
 
     public:
         static bool inThreadMode();
