@@ -64,23 +64,30 @@ namespace kernel {
     }
 
     void Scheduler::switchCurrentTask() {
+        // store active task into task to stack
         if (taskToStack == nullptr) {
             taskToStack.store(activeTask.load(std::memory_order_relaxed), std::memory_order_relaxed);
             activeTask.store(nullptr, std::memory_order_relaxed);
             triggerSwitch();
         }
+        // if there is a next task reschedule
         if (nextTask != nullptr) {
-            ready.insertWhen(nextTask.load(std::memory_order_relaxed), TaskController::priorityCompare);
+            const auto next = nextTask.load(std::memory_order_relaxed);
+            next->state_ = TaskController::State::ready;
+            ready.insertWhen(next, TaskController::priorityCompare);
         }
-        nextTask.store(ready.begin().item(), std::memory_order_relaxed);
+        // prepare next task from first ready task
+        const auto readyTask = ready.get_and_pop_front().item();
+        readyTask->state_ = TaskController::State::nextActive;
+        nextTask.store(readyTask, std::memory_order_relaxed);
     }
 
     bool Scheduler::startTask(TaskController *task) {
-        if (task->m_state != TaskController::State::notStarted)
+        if (task->state_ != TaskController::State::notStarted)
             return false;
         started.insertWhen(task, TaskController::priorityCompare);
         ready.insertWhen(task, TaskController::priorityCompare);
-        task->m_state = TaskController::State::ready;
+        task->state_ = TaskController::State::ready;
         Hooks::onTaskStart(task);
         if (schedulerStarted)
             maybeSwitchTask();
@@ -89,23 +96,33 @@ namespace kernel {
 
     bool Scheduler::maybeSwitchTask() {
         y_assert(!ready.empty()); //assertion to check there is ready tasks
-        const auto active = activeTask.load(std::memory_order_relaxed);
-        y_assert(active != nullptr);
-        if (!ready.empty() && ready.begin()->m_priority > active->m_priority) {
-            if (active->m_state == TaskController::State::active) {
-                ready.insertWhen(active, TaskController::priorityCompare);
-                active->m_state = TaskController::State::ready;
-                switchCurrentTask();
-                Hooks::onTaskStopExec(active);
-                Hooks::onTaskReady(active);
+        auto nextExecutingTask = activeTask.load(std::memory_order_relaxed);
+        if (nextExecutingTask != nullptr) {
+            if (!ready.empty() && ready.begin()->priority_ > nextExecutingTask->priority_) {
+                if (nextExecutingTask->state_ == TaskController::State::active) {
+                    nextExecutingTask->state_ = TaskController::State::ready;
+                    ready.insertWhen(nextExecutingTask, TaskController::priorityCompare);
+                    switchCurrentTask();
+                    Hooks::onTaskStopExec(nextExecutingTask);
+                    Hooks::onTaskReady(nextExecutingTask);
+                    return true;
+                }
             }
-            return true;
+        } else {
+            nextExecutingTask = nextTask.load(std::memory_order_relaxed);
+            y_assert(nextExecutingTask != nullptr); // at this point nextExecuting Task should be not empty
+            if (!ready.empty() && ready.begin()->priority_ > nextExecutingTask->priority_) {
+                switchCurrentTask();
+                Hooks::onTaskStopExec(nextExecutingTask);
+                Hooks::onTaskReady(nextExecutingTask);
+                return true;
+            }
         }
         return false;
     }
 
     const uint32_t volatile *Scheduler::getStackPointer(const TaskController *task) {
-        return task->m_stackPointer;
+        return task->stackPointer_;
     }
 
 
@@ -120,7 +137,7 @@ namespace kernel {
         if (activeTask == task) {
             activeTask.store(ready.get_and_pop_front().item());
             y_assert(activeTask != nullptr);
-            Core::restoreTask(activeTask.load(std::memory_order_relaxed)->m_stackPointer);
+            Core::restoreTask(activeTask.load(std::memory_order_relaxed)->stackPointer_);
         }
     }
 
@@ -129,7 +146,7 @@ namespace kernel {
         y_assert(currentActive != nullptr);
         currentActive->wakeupTimestamp(static_cast<uint32_t>(ticks) + ms);
         waiting.insertWhen(currentActive, TaskController::sleepCompare);
-        currentActive->m_state = TaskController::State::sleeping;
+        currentActive->state_ = TaskController::State::sleeping;
         Hooks::onTaskSleep(currentActive, ms);
         switchCurrentTask();
         checkTasks();
@@ -181,13 +198,14 @@ namespace kernel {
         y_assert(currentActive != nullptr);
         y_assert(nextActive != nullptr);
         currentActive->setStackPointer(stackPosition);
-        nextActive->m_state = kernel::TaskController::State::active;
+        nextActive->state_ = kernel::TaskController::State::active;
         activeTask.store(nextActive, std::memory_order_relaxed);
+        nextActive->state_ = TaskController::State::active;
         taskToStack.store(nullptr, std::memory_order_relaxed);
         nextTask.store(nullptr, std::memory_order_relaxed);
         Hooks::onTaskStartExec(activeTask);
         checkTasks();
-        return nextActive->m_stackPointer;
+        return nextActive->stackPointer_;
     }
 
     void Scheduler::systemTimerTick() {
@@ -290,7 +308,7 @@ namespace kernel {
         y_assert(firstTask != nullptr);
         Hooks::onTaskStartExec(firstTask);
         schedulerStarted = true;
-        firstTask->m_state = TaskController::State::active;
+        firstTask->state_ = TaskController::State::active;
         activeTask.store(firstTask, std::memory_order_relaxed);
         Core::restoreTask(getStackPointer(activeTask));
         return true; //should never return here

@@ -79,9 +79,9 @@ namespace kernel
 			Scheduler::waitFor(Scheduler::activeTask, duration);
 		}
 		currentTask->waitingFor(event);
-		currentTask->m_state = TaskController::State::waitingEvent; //sets active task as waiting
+		currentTask->state_ = TaskController::State::waitingEvent; //sets active task as waiting
 		Hooks::onTaskWaitEvent(currentTask, event);
-		Scheduler::triggerSwitch();
+		Scheduler::switchCurrentTask();
 		return 1;
 	}
 

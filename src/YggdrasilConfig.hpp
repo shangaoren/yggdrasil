@@ -5,13 +5,12 @@
 #else
 #define USE_DEFAULT_DYNAMIC_VECTOR
 #define USE_DEFAULT_CORTEX_M
-#define
-#include "core/CortexM7.hpp"
-#include "core/DynamicVector.hpp"
-#include "core/vendor/st/stm32f303x8.h"
+
+#include "core/cortex_m/CortexM.hpp"
+#include "core/cortex_m/DynamicVector.hpp"
 
 namespace kernel {
-    using Core = core::CortexM7;
+    using Core = core::CortexM;
     using Vector = core::DynamicVector<97>;
 class Config {
 public:

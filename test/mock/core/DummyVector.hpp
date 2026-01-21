@@ -1,24 +1,21 @@
 #pragma once
-#ifdef USE_DEFAULT_DYNAMIC_VECTOR
+#ifdef USE_DUMMY_VECTOR
 #include <cstdint>
-#include "Irq.hpp"
-#include "../../framework/assert.hpp"
+#include "../../../src/core/cortex_m/Irq.hpp"
 
 namespace core {
 template<uint16_t Size>
-class DynamicVector {
+class DummyVector {
   public :
   	using IrqHandler = void(*)();
 
   private:
     static inline IrqHandler vectorTable_[Size] __attribute__((aligned(512))); //must be aligned with next power of 2 of table size
 	static void defaultIsrHandler() {
-		uint8_t activeIsr = SCB->ICSR & 0x01FF;
-		asm("bkpt 0");
-		__get_IPSR();
+		for (;;);
 	}
 	static constexpr uint16_t kNumberMaxOfInterruptBits = 8U;
-	static constexpr uint16_t kNumberOfEnabledPriorityBits = __NVIC_PRIO_BITS;
+	static constexpr uint16_t kNumberOfEnabledPriorityBits = 3;
 	static constexpr uint16_t kPriorityOffsetBits = (kNumberMaxOfInterruptBits - kNumberOfEnabledPriorityBits);
 	static constexpr uint16_t kVectorKey = 0x05FAU;
 
@@ -30,7 +27,6 @@ class DynamicVector {
 		for (int i = 0; i < Size; i++) {
 			vectorTable_[i] = reinterpret_cast<IrqHandler>(defaultIsrHandler);
 		}
-		SCB->VTOR = tableBaseAddress();
 		return true;
 	}
 
@@ -69,8 +65,6 @@ class DynamicVector {
 
 		uint8_t priority = static_cast<uint8_t>((subPriority)
 				+ (preEmptPriority << numberOfSubBits_));
-		NVIC_SetPriority(static_cast<IRQn_Type>(static_cast<int16_t>(irq)),
-				priority);
 	}
 
 	static void irqPriority(Irq irq, uint8_t globalPriority)
@@ -78,68 +72,46 @@ class DynamicVector {
 		uint8_t priorityMask = (0xFF >> (kPriorityOffsetBits));
 		if (globalPriority > priorityMask)
 			globalPriority = priorityMask;
-
-		NVIC_SetPriority(static_cast<IRQn_Type>(static_cast<int16_t>(irq)),
-				globalPriority);
 	}
 
 	static uint8_t subPriorityBits()
 	{
-		return ((SCB->AIRCR & SCB_AIRCR_PRIGROUP_Msk)
-				>> (SCB_AIRCR_PRIGROUP_Pos + (kPriorityOffsetBits)));
+		return 0;
 	}
 
-	static void enableIrq(const Irq irq)
-			{
-		NVIC_EnableIRQ(static_cast<IRQn_Type>(static_cast<int16_t>(irq)));
+	static void enableIrq(const Irq irq){
 	}
 
 	static void disableIrq(const Irq irq)
 	{
-		NVIC_DisableIRQ(static_cast<IRQn_Type>(static_cast<int16_t>(irq)));
 	}
 
 	static void clearIrq(const Irq irq)
 	{
-		NVIC_ClearPendingIRQ(static_cast<IRQn_Type>(static_cast<int16_t>(irq)));
 	}
 
-	static uint8_t lockInterruptsHigherThan(const uint8_t priority)
-			{
-		uint8_t result = __get_BASEPRI() >> kPriorityOffsetBits;
-		y_assert(priority != 0);
-		if ((result > priority) | (result == 0))
-			__set_BASEPRI(priority << kPriorityOffsetBits);
-		return result;
+	static uint8_t lockInterruptsHigherThan(const uint8_t priority){
+		return 0;
 	}
 
-	static void unlockInterruptsHigherThan(uint8_t priorityToRestore)
-			{
-		y_assert(priorityToRestore != 0xF0);
-		auto result = __get_BASEPRI() >> kPriorityOffsetBits;
-		if ((result < priorityToRestore) | (priorityToRestore == 0))
-			__set_BASEPRI(priorityToRestore << kPriorityOffsetBits);
-		__ISB();
+	static void unlockInterruptsHigherThan(uint8_t priorityToRestore){
 	}
 
 	static  void lockAllInterrupts()
 	{
-		__set_PRIMASK(1);
 	}
 
 	static void enableAllInterrupts()
 	{
-		__set_PRIMASK(0);
 	}
 
 	static bool isInstalled()
 	{
-		return SCB->VTOR == tableBaseAddress();
+		return true;
 	}
 
 	static inline bool installVectorManager()
 	{
-		SCB->VTOR = tableBaseAddress();
 		return true;
 	}
 };

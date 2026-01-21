@@ -34,8 +34,6 @@ Software without prior written authorization from Florian GERARD
 #include <atomic>
 #include <limits>
 
-#include "yggdrasil/src/framework/assert.hpp"
-
 
 namespace framework {
     template<typename Item>
@@ -72,13 +70,11 @@ namespace framework {
         }
 
         self_type& operator++() {
-            y_assert(item_ != nullptr);
             item_ = next();
             return *this;
         }
 
         self_type& operator--() {
-            y_assert(item_ != nullptr);
             item_ = previous();
             return *this;
         }
@@ -104,12 +100,10 @@ namespace framework {
         }
 
         [[nodiscard]] pointer next() const {
-            y_assert(item_ != nullptr);
             return item_->List::next_;
         }
 
         pointer next(pointer ptr) {
-            y_assert(item_ != nullptr);
             return item_->List::next_ = ptr;
         }
 
@@ -118,12 +112,10 @@ namespace framework {
         }
 
         [[nodiscard]] pointer previous() const {
-            y_assert(item_ != nullptr);
             return item_->List::previous_;
         }
 
         pointer previous(pointer ptr){
-            y_assert(item_ != nullptr);
             return item_->List::previous_ = ptr;
         }
 
@@ -135,7 +127,6 @@ namespace framework {
         Item* item_;
 
         void reset() const {
-            y_assert(item_ != nullptr);
             item_->List::previous_ = nullptr;
             item_->List::next_ = nullptr;
         }
@@ -164,13 +155,11 @@ namespace framework {
         constexpr explicit YNodeConstIterator(pointer ptr = nullptr): item_(ptr) {}
 
         self_type& operator++() {
-            y_assert(item_ != nullptr);
             item_ = next();
             return *this;
         }
 
         self_type& operator--() {
-            y_assert(item_ != nullptr);
             item_ = previous();
             return *this;
         }
@@ -196,12 +185,10 @@ namespace framework {
         }
 
         [[nodiscard]] pointer next() const {
-            y_assert(item_ != nullptr);
             return item_->List::next_;
         }
 
         [[nodiscard]] pointer previous() const {
-            y_assert(item_ != nullptr);
             return item_->List::previous_;
         }
 
@@ -248,24 +235,20 @@ namespace framework {
 
         //Element Access
         constexpr reference front() {
-            y_assert(first_ != nullptr);
             return *first_;
         }
 
         constexpr const_reference front() const {
-            y_assert(first_ != nullptr);
             return *first_;
         }
 
         //TODO
         constexpr reference back() {
-            y_assert(first_ != nullptr);
             return *first_;
         }
 
         //TODO
         constexpr const_reference back() const {
-            y_assert(first_ != nullptr);
             return *first_;
         }
 
@@ -290,7 +273,6 @@ namespace framework {
 
         //Capacity
         [[nodiscard]] constexpr bool empty() const {
-            y_assert((first_ != nullptr) ^ (count_ == 0));
             return count_ == 0;
         }
 
@@ -310,8 +292,6 @@ namespace framework {
         }
 
         void insertAt(iterator pos, pointer item) {
-            y_assert(pos.item_ != nullptr);
-            y_assert(iterator(item).is_free() && first_ != item);
             auto next = iterator(pos.next());
             auto newNode = iterator(item);
 
@@ -326,8 +306,6 @@ namespace framework {
         }
 
         iterator erase(const iterator pos) {
-            y_assert(pos.item_ != nullptr);
-
             if (empty()) {
                 return iterator(nullptr);
             }
@@ -362,9 +340,6 @@ namespace framework {
 
         void push_front(pointer item) {
             auto it = iterator(item);
-            y_assert(item != nullptr);
-            y_assert(it.is_free() && first_ != item);
-
             if (!empty()) {
                 it.next(first_);
                 iterator(first_).previous(it.ptr());
@@ -374,7 +349,6 @@ namespace framework {
         }
 
         void pop_front() {
-            y_assert(!empty());
             auto it = iterator(first_);
             first_ = it.next();
             it.reset();
@@ -388,8 +362,6 @@ namespace framework {
         }
 
         void push_back(pointer item) {
-            y_assert(item != nullptr);
-            y_assert(iterator(item).is_free() && first_ != item);
             if (empty()) {
                 first_ = item;
                 count_ = count_ + 1;
@@ -404,15 +376,12 @@ namespace framework {
 
         void insertWhen(Item *node, const Comparator predicate) {
             auto it = iterator(node);
-            y_assert(node != nullptr);
-            y_assert(it.is_free() && first_ != node);
-
             if (first_ == nullptr || predicate(first_, it.item()) > 0) {
                 push_front(node);
             } else {
                 auto previous = iterator(first_);
                 auto current = iterator(previous.next());
-                while (current.isValid() && predicate(first_, current.item()) < 0) {
+                while (current.isValid() && predicate(current.item(), it.item()) < 0) {
                     previous = current;
                     current = iterator(previous.next());
                 }
@@ -422,7 +391,6 @@ namespace framework {
 
 
         [[nodiscard]] bool contain(Item *node) const{
-            y_assert(node != nullptr);
             if (first_ == nullptr) {
                 return false;
             }
