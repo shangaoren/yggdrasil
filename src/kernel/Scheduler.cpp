@@ -149,7 +149,7 @@ namespace kernel {
         currentActive->state_ = TaskController::State::sleeping;
         Hooks::onTaskSleep(currentActive, ms);
         switchCurrentTask();
-        checkTasks();
+        //checkTasks();
     }
 
     void Scheduler::waitFor(TaskController *task, uint32_t waitTicks) {
@@ -170,7 +170,7 @@ namespace kernel {
         y_assert(Scheduler::ready.contain(task));
         y_assert(!Scheduler::waiting.contain(task));
         Hooks::onTaskReady(task);
-        checkTasks();
+        //checkTasks();
         maybeSwitchTask();
     }
 
@@ -181,7 +181,7 @@ namespace kernel {
             waiting.erase(task);
             task->wakeupTimestamp(0);
         }
-        checkTasks();
+        //checkTasks();
     }
 
     void inline Scheduler::triggerSwitch() {
@@ -204,7 +204,7 @@ namespace kernel {
         taskToStack.store(nullptr, std::memory_order_relaxed);
         nextTask.store(nullptr, std::memory_order_relaxed);
         Hooks::onTaskStartExec(activeTask);
-        checkTasks();
+        //checkTasks();
         return nextActive->stackPointer_;
     }
 
@@ -223,7 +223,7 @@ namespace kernel {
                 waiter->waitingFor()->onTimeout(waiter);
             }
         }
-        checkTasks();
+        //checkTasks();
         if (maybeNeedsTaskSwitch) {
             maybeSwitchTask();
         }
