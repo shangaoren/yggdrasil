@@ -34,6 +34,9 @@
 namespace kernel {
     class TaskController;
 
+    template <typename T, std::size_t N>
+    class Mailbox;
+
     class StartedListNode : public framework::YNode<TaskController> {};
     class ReadyListNode : public framework::YNode<TaskController> {};
     class WaitableListNode : public framework::YNode<TaskController> {};
@@ -177,6 +180,9 @@ namespace kernel {
     template<uint32_t StackSize>
     class Task {
         friend class Hooks;
+        template <typename T, std::size_t N>
+        friend class Mailbox;
+
     public:
         constexpr Task() : ctrl_(stack_, StackSize) {}
         Task(Task& ) = delete;
@@ -194,6 +200,8 @@ namespace kernel {
         }
 
     private:
+        constexpr TaskController& controller() noexcept { return ctrl_; }
+
         uint32_t stack_[StackSize]__attribute__((aligned(4)));
         TaskController ctrl_;
     };

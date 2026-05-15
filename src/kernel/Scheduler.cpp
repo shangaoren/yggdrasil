@@ -30,6 +30,7 @@ Software without prior written authorization from Florian GERARD
 #include "Hooks.hpp"
 #include "Event.hpp"
 #include "Mutex.hpp"
+#include "Mailbox.hpp"
 
 namespace kernel {
     bool Scheduler::schedulerStarted = false;
@@ -297,6 +298,16 @@ namespace kernel {
                 Mutex::kernelReleaseMutex(reinterpret_cast<Mutex *>(param0));
                 break;
 
+            case ServiceCall::SvcNumber::mailboxPost:
+                if constexpr (Config::kEnableMailbox) {
+                    t_args[0] = static_cast<uint32_t>(MailboxCore::kernelPost(
+                        reinterpret_cast<MailboxCore *>(param0),
+                        reinterpret_cast<const void *>(param1)));
+                } else {
+                    Core::breakpoint();
+                }
+                break;
+
             default: //unknown Service call number
                 Core::breakpoint();
                 break;
@@ -317,7 +328,7 @@ namespace kernel {
     void Scheduler::enterKernelCriticalSection() {
           y_assert(isKernelLocked == false);
           if (!isKernelLocked) {
-              lockLevel = Vector::lockInterruptsHigherThan(Config::kernelPriority);
+              lockLevel = Vector::lockInterruptsHigherThan(Config::kKernelPriority);
               isKernelLocked = true;
           }
       }

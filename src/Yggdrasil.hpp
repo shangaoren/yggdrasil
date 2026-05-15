@@ -78,7 +78,7 @@ namespace kernel
 			y_assert(!Scheduler::isStarted());
 			y_assert(Vector::isInstalled());
 			Core::idleTask.start(Core::idleFunc, true, 0, 0, "idle"); // Add idle task
-			Core::SystemTimer::init(Core::getCoreFrequency(), Config::systemTimerFrequency);
+			Core::SystemTimer::init(Core::getCoreFrequency(), Config::kSystemTimerFrequency);
 			Core::SystemTimer::start();
 			Hooks::onKernelStart();
 			Core::template SupervisorCallHelper<ServiceCall::SvcNumber::startFirstTask,void()>::call();
@@ -164,11 +164,11 @@ namespace kernel
 				return false;
 			}
 			//Setup Systick
-			Vector::irqPriority(Core::systemTimerIrq, Config::kernelPriority);
+			Vector::irqPriority(Core::systemTimerIrq, Config::kKernelPriority);
 			Vector::registerHandler(Core::systemTimerIrq, Core::systemTimerHandler, "Systick");
 
 			//Setup Supervisor Call interrupt
-			Vector::irqPriority(Core::supervisorCallIrq, Config::kernelPriority);
+			Vector::irqPriority(Core::supervisorCallIrq, Config::kKernelPriority);
 			Vector::registerHandler(Core::supervisorCallIrq, Core::supervisorCallHandler, "SVC");
 
 			//Setup pendSV interrupt (used for task change)

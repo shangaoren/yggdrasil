@@ -14,8 +14,9 @@ namespace kernel {
     using Vector = core::DynamicVector<97>;
 class Config {
 public:
-    static constexpr uint8_t kernelPriority = 2;
-    static constexpr uint32_t systemTimerFrequency = 1000;
+    static constexpr uint8_t kKernelPriority = 2;
+    static constexpr uint32_t kSystemTimerFrequency = 1000;
+    static constexpr bool kEnableMailbox = false;
 };
 }
 #endif

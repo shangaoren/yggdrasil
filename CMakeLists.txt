@@ -9,6 +9,7 @@ file(GLOB ${PROJECT_NAME}_SOURCES
         "src/kernel/Scheduler.cpp"
         "src/kernel/Mutex.cpp"
         "src/kernel/Event.cpp"
+        "src/kernel/Mailbox.cpp"
         "src/kernel/CriticalSection.cpp"
         "src/framework/assert.cpp"
         "src/core/cortex_m/CortexM.cpp"

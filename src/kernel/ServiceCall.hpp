@@ -56,6 +56,7 @@ namespace kernel
 			exitCriticalSection,
 			mutexLock,
 			mutexRelease,
+			mailboxPost,
 		};
 	};
 }

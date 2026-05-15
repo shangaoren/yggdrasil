@@ -38,6 +38,7 @@ namespace kernel {
         friend class TaskController;
         friend class Event;
         friend class Mutex;
+        friend class MailboxCore;
         friend class Yggdrasil;
         friend class Hooks;
         friend Core;
